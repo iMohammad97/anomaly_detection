@@ -1,0 +1,115 @@
+import numpy as np
+import pandas as pd
+import logging
+from back_tester import ExpandingWalkForward, RollingWalkForward
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+
+class TimeSeriesAnomalyDetectorKNN:
+    def __init__(self, window_length, k, train, test, dim=1, metric='cosine'):
+        self.window_length = window_length
+        self.training_data = train
+        self.test_data = test
+        self.labels = None
+        self.k = k
+        self.dim = dim
+        self.sigma = np.diag(np.ones(self.dim))
+        self.scores = None
+        self.train_data_matrix = None
+        self.test_data_matrix = None
+        self.y_anomaly = None
+        self.metric = metric
+
+    def transform_to_matrix(self, time_series):
+        if len(time_series) < self.window_length:
+            raise ValueError(f"Time series length ({len(time_series)}) must be greater than or equal to the window length ({self.window_length}).")
+        num_rows = len(time_series) - self.window_length + 1
+
+        matrix = np.zeros((num_rows, self.window_length))
+        for i in range(num_rows):
+            matrix[i, :] = time_series[i:i + self.window_length]
+        return matrix
+
+    def train_func(self, X_train, y_train, train_hyperparameters_dict):
+        flattened_train = X_train.to_numpy().flatten()
+        if len(flattened_train) < self.window_length:
+            raise ValueError(f"Training data length ({len(flattened_train)}) must be greater than or equal to the window length ({self.window_length}).")
+        self.training_data = self.transform_to_matrix(flattened_train)
+        return None
+
+    def test_func(self, model, X_test):
+        flattened_test = X_test.to_numpy().flatten()
+        # print(X_test)
+        # if len(flattened_test) < self.window_length:
+        #     raise ValueError(f"Test data length ({len(flattened_test)}) must be greater than or equal to the window length ({self.window_length}).")
+        self.test_data = self.transform_to_matrix(flattened_test)
+
+        if self.metric == 'cosine':
+            batch = self.test_data
+            distance_matrix = self.calculate_cosine_distances(batch, self.training_data)
+        elif self.metric == 'mahalanobis':
+            batch = self.test_data
+            distance_matrix = self.calculate_mahalanobis_distances(batch, self.training_data, self.sigma)
+
+        # Find the k smallest distances and sum them up for each test data point in the batch
+        results = np.sum(np.sort(distance_matrix, axis=1)[:, :self.k], axis=1)
+        return results
+
+    def calc_anomaly(self, mode='expanding'):
+        if mode == 'rolling':
+            wf = RollingWalkForward(window_size=1000, step_period=100)
+        elif mode == 'expanding':
+            wf = ExpandingWalkForward(step_period=100)
+        start_index = self.test_data.index[self.window_length]
+        self.y_anomaly, _ = wf.run_prediction(X=self.training_data, y=self.test_data,
+                                              start_testing_point_index=start_index,
+                                              train_func=self.train_func, test_func=self.test_func)
+        y_predicted_df = [(date, value) for dates, values in self.y_anomaly for date, value in zip(dates, values)]
+        y_predicted_df = pd.DataFrame(y_predicted_df, columns=['greg_date', 'knn']).set_index('greg_date')
+        self.y_anomaly = y_predicted_df
+        return self.y_anomaly
+
+    def calculate_cosine_distances(self, test_data, train_data):
+        # Normalize training data
+        train_norms = np.linalg.norm(train_data, axis=1)
+        train_normalized = train_data / train_norms[:, np.newaxis]
+
+        # Normalize test data
+        test_norms = np.linalg.norm(test_data, axis=1)
+        test_normalized = test_data / test_norms[:, np.newaxis]
+
+        # Compute cosine similarity matrix
+        similarity_matrix = np.dot(test_normalized, train_normalized.T)
+
+        # Convert similarity to distance
+        distance_matrix = 1 - similarity_matrix
+
+        return distance_matrix
+
+    def calculate_mahalanobis_distances(self, test_data, train_data, inv_covmat):
+        # Calculate differences between each test and train pair
+        diff = test_data[:, np.newaxis, :] - train_data
+        # Apply the Mahalanobis formula using matrix multiplication
+        left_term = np.dot(diff, inv_covmat)
+        mahalanobis_distance_squared = np.einsum('ijk,ijk->ij', left_term, diff)
+
+        return np.sqrt(mahalanobis_distance_squared)
+
+# Example use case, to ensure the data has sufficient length
+def main():
+    train_data = np.random.rand(100)  # Replace with actual data
+    test_data = np.random.rand(100)   # Replace with actual data
+
+    if len(train_data) < 30 or len(test_data) < 30:
+        logging.error("Insufficient data length for the specified window length.")
+        return
+
+    knn_model = TimeSeriesAnomalyDetectorKNN(window_length=30, k=10, train=train_data, test=test_data, metric='cosine')
+    try:
+        knn_model.calc_anomaly()
+    except ValueError as e:
+        logging.error(e)
+
+if __name__ == "__main__":
+    main()
