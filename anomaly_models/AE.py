@@ -62,6 +62,76 @@ def build_lstm_autoencoder(timesteps: int, features: int, latent_dim: int = 32, 
     return model
 
 
+def build_lstm_vae(timesteps, features, latent_dim=32, lstm_units=64):
+    class Sampling(layers.Layer):
+        """Uses (z_mean, z_log_var) to sample z, the vector encoding a digit."""
+        def call(self, inputs):
+            z_mean, z_log_var = inputs
+            batch = tf.shape(z_mean)[0]
+            dim = tf.shape(z_mean)[1]
+            epsilon = tf.keras.backend.random_normal(shape=(batch, dim))
+            return z_mean + tf.exp(0.5 * z_log_var) * epsilon
+
+    # Encoder
+    inputs = tf.keras.Input(shape=(timesteps, features))
+    x = layers.LSTM(lstm_units, return_sequences=True)(inputs)
+    x = layers.LSTM(latent_dim, return_sequences=False)(x)
+    z_mean = layers.Dense(latent_dim)(x)
+    z_log_var = layers.Dense(latent_dim)(x)
+    z = Sampling()([z_mean, z_log_var])
+
+    # Decoder
+    x = layers.RepeatVector(timesteps)(z)
+    x = layers.LSTM(latent_dim, return_sequences=True)(x)
+    x = layers.LSTM(lstm_units, return_sequences=True)(x)
+    outputs = layers.TimeDistributed(layers.Dense(features))(x)
+
+    # VAE Model
+    vae = models.Model(inputs, outputs)
+
+    # Custom KL divergence loss layer
+    class KLDivergenceLayer(layers.Layer):
+        def call(self, inputs):
+            z_mean, z_log_var = inputs
+            kl_loss = -0.5 * tf.reduce_mean(
+                z_log_var - tf.square(z_mean) - tf.exp(z_log_var) + 1)
+            self.add_loss(kl_loss)
+            return z_mean
+
+    kl_layer = KLDivergenceLayer()([z_mean, z_log_var])
+
+    return vae
+    
+
+def build_lstm_dae(timesteps, features, latent_dim=32, lstm_units=64):
+    # Encoder
+    inputs = tf.keras.Input(shape=(timesteps, features))
+    x = layers.LSTM(lstm_units, return_sequences=True)(inputs)
+    x = layers.LSTM(latent_dim, return_sequences=False)(x)
+    latent = layers.Dense(latent_dim)(x)
+
+    # Decoder
+    x = layers.RepeatVector(timesteps)(latent)
+    x = layers.LSTM(latent_dim, return_sequences=True)(x)
+    x = layers.LSTM(lstm_units, return_sequences=True)(x)
+    outputs = layers.TimeDistributed(layers.Dense(features))(x)
+
+    # DAE Model
+    dae = models.Model(inputs, outputs)
+
+    # Custom MSE loss on latent space
+    class MSELossLayer(layers.Layer):
+        def call(self, inputs):
+            latent = inputs
+            mse_loss = tf.reduce_mean(tf.square(latent))
+            self.add_loss(mse_loss)
+            return latent
+
+    mse_layer = MSELossLayer()(latent)
+
+    return dae
+
+
 def train_autoencoder(
         model: tf.keras.Model,
         X_train_windows: np.ndarray,
