@@ -12,6 +12,8 @@ import matplotlib.pyplot as plt
 
 def preprocess_UCR(dataset_raw_dir,dataset_processed_dir):
     file_list = os.listdir(dataset_raw_dir)
+    dataset_categories = []
+    base_directory = dataset_processed_dir
     for filename in file_list:
         if not filename.endswith('.txt'):
             continue
@@ -19,6 +21,10 @@ def preprocess_UCR(dataset_raw_dir,dataset_processed_dir):
         filename_parts = filename.split('.')[0].split('_')
         try:
             dataset_number = int(filename_parts[0])
+            dataset_category = filename_parts[3]
+            dataset_categories.append(dataset_category)
+            new_directory_path = os.path.join(base_directory, dataset_category)
+            os.makedirs(new_directory_path, exist_ok=True)
             train_range, start_anomaly, end_anomaly = map(int, filename_parts[-3:])
         except ValueError:
             print(f"Skipping file {filename}: Invalid filename format.")
@@ -42,7 +48,7 @@ def preprocess_UCR(dataset_raw_dir,dataset_processed_dir):
 
         data_splits = {'train': training_data, 'test': testing_data, 'labels': anomaly_labels}
         for split_name in data_splits:
-            np.save(os.path.join(dataset_processed_dir, f'{dataset_number}_{split_name}.npy'), data_splits[split_name])
+            np.save(os.path.join(new_directory_path, f'{dataset_number}_{split_name}.npy'), data_splits[split_name])
 
 def preprocess_SMD(dataset_raw_dir, dataset_processed_dir):
     if not os.path.exists(dataset_processed_dir):
