@@ -114,6 +114,22 @@ class LatentAverageMSELossLayer(layers.Layer):
 
         return latent
 
+# Impose loss on the latent space to make it stationary
+class StationaryLoss(layers.Layer):
+    def call(self, latent, mean_coef: float = 1, std_coef: float = 1):
+        # Calculate the average of the latent space
+        latent_avg = tf.reduce_mean(latent, axis=0)
+        mse_loss = tf.reduce_mean(tf.square(latent_avg))
+        self.add_loss(mean_coef * mse_loss)
+
+        # Calculate the standard deviation of the latent space
+        latent_std = tf.math.reduce_std(latent, axis=0)
+        std_loss = tf.reduce_mean(tf.square(latent_std - 1.0))
+        self.add_loss(std_coef * std_loss)
+
+        return latent
+
+
 def build_lstm_dae(timesteps, features, latent_dim=32, lstm_units=64, mean_coef: float = 1, var_coef: float = 1):
     # Encoder
     inputs = tf.keras.Input(shape=(timesteps, features))
@@ -122,7 +138,7 @@ def build_lstm_dae(timesteps, features, latent_dim=32, lstm_units=64, mean_coef:
     latent = layers.Dense(latent_dim)(x)
 
     # Apply custom loss to the latent space
-    latent_with_loss = LatentAverageMSELossLayer()(latent, mean_coef, var_coef)
+    latent_with_loss = StationaryLoss()(latent, mean_coef, var_coef)
 
     # Decoder
     x = layers.RepeatVector(timesteps)(latent_with_loss)
