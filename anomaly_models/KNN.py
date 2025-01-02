@@ -32,14 +32,14 @@ class TimeSeriesAnomalyDetectorKNN:
             matrix[i, :] = time_series[i:i + self.window_length]
         return matrix
 
-    def train_func(self, X_train, y_train, train_hyperparameters_dict):
+    def train_func(self, X_train, y_train):
         flattened_train = X_train.to_numpy().flatten()
         if len(flattened_train) < self.window_length:
             raise ValueError(f"Training data length ({len(flattened_train)}) must be greater than or equal to the window length ({self.window_length}).")
         self.training_data = self.transform_to_matrix(flattened_train)
         return None
 
-    def test_func(self, model, X_test):
+    def test_func(self, X_test):
         flattened_test = X_test.to_numpy().flatten()
         # print(X_test)
         # if len(flattened_test) < self.window_length:
@@ -58,18 +58,10 @@ class TimeSeriesAnomalyDetectorKNN:
         return results
 
     def calc_anomaly(self, mode='expanding'):
-        if mode == 'rolling':
-            wf = RollingWalkForward(window_size=self.window_size, step_period=self.step_period)
-        elif mode == 'expanding':
-            wf = ExpandingWalkForward(step_period=self.step_period)
-        start_index = self.test_data.index[self.window_length]
-        self.y_anomaly, _ = wf.run_prediction(X=self.training_data, y=self.test_data,
-                                              start_testing_point_index=start_index,
-                                              train_func=self.train_func, test_func=self.test_func)
-        y_predicted_df = [(date, value) for dates, values in self.y_anomaly for date, value in zip(dates, values)]
-        y_predicted_df = pd.DataFrame(y_predicted_df, columns=['greg_date', 'knn']).set_index('greg_date')
-        self.y_anomaly = y_predicted_df
-        return self.y_anomaly
+        self.train_func(self.training_data,self.training_data)
+        self.y_anomaly = np.zeros(self.window_length-1)
+        self.y_anomaly = np.append(self.y_anomaly, self.test_func(self.test_data))
+        return pd.Series(self.y_anomaly)
 
     def calculate_cosine_distances(self, test_data, train_data):
         # Normalize training data
