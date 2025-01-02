@@ -71,3 +71,41 @@ def second_order_div_diff_log_interval(signal, lag=1):
     result = np.zeros_like(first_order)
     result[lag:] = first_order[lag:] - first_order[:-lag]
     return result
+
+def kalman_filter(signal):
+    n = len(signal)
+    x = np.zeros(n)  # Filtered state
+    p = np.zeros(n)  # Error covariance
+    q = 1e-5  # Process noise variance
+    r = 1e-2  # Measurement noise variance
+    x[0] = signal[0]
+    p[0] = 1.0
+    for t in range(1, n):
+        # Prediction
+        x[t] = x[t - 1]
+        p[t] = p[t - 1] + q
+        # Update
+        k = p[t] / (p[t] + r)  # Kalman gain
+        x[t] = x[t] + k * (signal[t] - x[t])
+        p[t] = (1 - k) * p[t]
+    return x
+
+def particle_filter(signal, num_particles=100):
+    n = len(signal)
+    particles = np.random.normal(signal[0], 1.0, num_particles)
+    weights = np.ones(num_particles) / num_particles
+    estimates = []
+    for t in range(n):
+        # Predict
+        particles += np.random.normal(0, 0.1, num_particles)
+        # Update
+        likelihoods = np.exp(-0.5 * ((signal[t] - particles) / 1.0) ** 2)
+        weights *= likelihoods
+        weights /= np.sum(weights)  # Normalize
+        # Resample
+        indices = np.random.choice(num_particles, num_particles, p=weights)
+        particles = particles[indices]
+        weights = np.ones(num_particles) / num_particles
+        # Estimate
+        estimates.append(np.mean(particles))
+    return np.array(estimates)
