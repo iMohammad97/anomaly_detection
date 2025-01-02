@@ -1,3 +1,9 @@
+import os
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
 def plot_sync_series(time_series, title="Synchronized Time Series Plots"):
     """Helper function to visualize multiple time series as separate subplots."""
     # Create subplots
