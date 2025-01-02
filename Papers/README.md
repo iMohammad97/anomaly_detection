@@ -59,14 +59,14 @@ TriAD GitHub Repository
 https://github.com/pseudo-Skye/TriAD
 
 ## [Unravel Anomalies: An End-to-End Seasonal-Trend Decomposition Approach for Time Series Anomaly Detection](https://arxiv.org/abs/2310.00268)
-Add seasonal-trend decomposition model for time-series anomaly detection TADNet is an end-to-end time-series anomaly detection model that leverages seasonal-trend decomposition to link various types of anomalies to specific decomposition components, simplifying the analysis of complex time-series data and enhancing detection performance
+Add seasonal-trend decomposition model for time-series anomaly detection TADNet is an end-to-end time-series anomaly detection model that leverages seasonal-trend decomposition to link various types of anomalies to specific decomposition components, simplifying the analysis of complex time-series data and enhancing detection performance. IEEE 2023
 https://github.com/zhangzw16/TADNet
 
 ## [Unsupervised Model Selection for Time-series Anomaly Detection](https://arxiv.org/abs/2210.01078)
 Identify three classes of surrogate (unsupervised) metrics, namely, prediction error, model centrality, and performance on injected synthetic anomalies
 
 ## [MOMENT: A Family of Open Time-series Foundation Models](https://arxiv.org/abs/2402.03885)
-Foundation models for time series. 
+Foundation models for time series. ICML 2024 
 https://huggingface.co/AutonLab
 https://github.com/moment-timeseries-foundation-model/moment
 
