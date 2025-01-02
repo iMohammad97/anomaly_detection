@@ -23,20 +23,17 @@ def impute_nans(X: np.ndarray):
     return X
 
 
-def create_windows(data: np.ndarray, window_size: int):
-    """
-    Given a 1D time-series, create overlapping windows of length window_size.
-    Returns an array of shape (num_windows, window_size, 1).
-    If the series is too short, return None.
-    """
-    N = data.shape[0]
-    if N < window_size:
-        return None
-    windows = []
-    for i in range(N - window_size + 1):
-        window = data[i:i + window_size]
+def create_windows(data, window_size: int, step_size: int = 1): 
+    """ Given a 2D array `data` of shape (N, features), create overlapping windows of shape (window_size, features). 
+    Returns array of shape (M, window_size, features). If data is shorter than window_size, returns None. """ 
+    N = data.shape[0] 
+    if N < window_size: 
+        return None 
+    windows = [] 
+    for i in range(0, N - window_size + 1, step_size): 
+        window = data[i:i+window_size] 
         windows.append(window)
-    return np.stack(windows, axis=0)  # (M, window_size)
+    return np.stack(windows, axis=0)
 
 
 ############################################
@@ -101,9 +98,44 @@ def build_lstm_vae(timesteps, features, latent_dim=32, lstm_units=64):
     kl_layer = KLDivergenceLayer()([z_mean, z_log_var])
 
     return vae
-    
 
-def build_lstm_dae(timesteps, features, latent_dim=32, lstm_units=64):
+# Impose loss on the latent space to make it stationary
+class LatentAverageMSELossLayer(layers.Layer):
+    def call(self, latent, mean_coef: float = 1, var_coef: float = 1):
+        # Calculate the average of the latent space
+        latent_avg = tf.reduce_mean(latent, axis=0)
+        mse_loss = tf.reduce_mean(tf.square(latent_avg))
+        self.add_loss(mean_coef * mse_loss)
+
+        # Calculate the variance of the latent space
+        latent_var = tf.reduce_mean(tf.square(latent - latent_avg), axis=0)
+        var_loss = tf.reduce_mean(tf.square(latent_var - 1.0))
+        self.add_loss(var_coef * var_loss)
+
+        return latent
+
+def build_lstm_dae(timesteps, features, latent_dim=32, lstm_units=64, mean_coef: float = 1, var_coef: float = 1):
+    # Encoder
+    inputs = tf.keras.Input(shape=(timesteps, features))
+    x = layers.LSTM(lstm_units, return_sequences=True)(inputs)
+    x = layers.LSTM(latent_dim, return_sequences=False)(x)
+    latent = layers.Dense(latent_dim)(x)
+
+    # Apply custom loss to the latent space
+    latent_with_loss = LatentAverageMSELossLayer()(latent, mean_coef, var_coef)
+
+    # Decoder
+    x = layers.RepeatVector(timesteps)(latent_with_loss)
+    x = layers.LSTM(latent_dim, return_sequences=True)(x)
+    x = layers.LSTM(lstm_units, return_sequences=True)(x)
+    outputs = layers.TimeDistributed(layers.Dense(features))(x)
+
+    # DAE Model
+    dae = models.Model(inputs, outputs)
+
+    return dae
+
+def build_lstm_dae2(timesteps, features, latent_dim=32, lstm_units=64):
     # Encoder
     inputs = tf.keras.Input(shape=(timesteps, features))
     x = layers.LSTM(lstm_units, return_sequences=True)(inputs)
