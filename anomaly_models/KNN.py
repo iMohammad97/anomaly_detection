@@ -88,6 +88,27 @@ class TimeSeriesAnomalyDetectorKNN:
 
         return np.sqrt(mahalanobis_distance_squared)
 
+
+    def calculate_anomaly_threshold(self, quantile=0.95):
+        """
+        Calculate anomaly threshold based on training data.
+        
+        :param quantile: The quantile to use for the threshold. Defaults to 0.95.
+        :return: Threshold value for anomaly detection.
+        """
+        logging.info("Calculating anomaly threshold from training data.")
+        
+        self.train_func(self.training_data, self.training_data)
+        
+        # Compute anomaly scores for training data
+        anomaly_scores = self.test_func(self.training_data)
+        
+        # Compute the threshold based on the specified quantile
+        threshold = np.quantile(anomaly_scores, quantile)
+        
+        logging.info(f"Calculated threshold: {threshold}")
+        return threshold
+
 #use knn
 
     # knn_model = TimeSeriesAnomalyDetectorKNN(window_length=30, k=10, train=train_data, test=test_data, metric='cosine')
