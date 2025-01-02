@@ -96,20 +96,12 @@ class TimeSeriesAnomalyDetectorKNN:
 
         return np.sqrt(mahalanobis_distance_squared)
 
-# Example use case, to ensure the data has sufficient length
-def main():
-    train_data = np.random.rand(100)  # Replace with actual data
-    test_data = np.random.rand(100)   # Replace with actual data
+#use knn
 
-    if len(train_data) < 30 or len(test_data) < 30:
-        logging.error("Insufficient data length for the specified window length.")
-        return
+    # knn_model = TimeSeriesAnomalyDetectorKNN(window_length=30, k=10, train=train_data, test=test_data, metric='cosine')
+    # try:
+    #     knn_model.calc_anomaly()
+    # except ValueError as e:
+    #     logging.error(e)
 
-    knn_model = TimeSeriesAnomalyDetectorKNN(window_length=30, k=10, train=train_data, test=test_data, metric='cosine')
-    try:
-        knn_model.calc_anomaly()
-    except ValueError as e:
-        logging.error(e)
 
-if __name__ == "__main__":
-    main()
