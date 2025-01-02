@@ -1,7 +1,5 @@
-from scipy.fft import fft
 import numpy as np
 from scipy.fft import fft
-from scipy.signal import savgol_filter
 from sklearn.preprocessing import MinMaxScaler
 from scipy.stats import boxcox
 
@@ -61,3 +59,15 @@ def second_order_diff(signal):
 
 def boxcox_transform(signal):
     return boxcox(signal - np.min(signal) + 1)[0] if (signal > 0).all() else signal
+
+def first_order_div_diff_log_interval(signal, lag=1):
+    log_signal = np.log1p(1 + np.abs(signal))
+    result = np.zeros_like(signal)
+    result[lag:] = log_signal[lag:] - log_signal[:-lag]
+    return result
+
+def second_order_div_diff_log_interval(signal, lag=1):
+    first_order = first_order_div_diff_log_interval(signal, lag)
+    result = np.zeros_like(first_order)
+    result[lag:] = first_order[lag:] - first_order[:-lag]
+    return result
