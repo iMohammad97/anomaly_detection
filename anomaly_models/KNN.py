@@ -7,8 +7,9 @@ from back_tester import ExpandingWalkForward, RollingWalkForward
 logging.basicConfig(level=logging.INFO)
 
 class TimeSeriesAnomalyDetectorKNN:
-    def __init__(self, window_length, k, train, test, dim=1, metric='cosine'):
+    def __init__(self, k, train, test, dim=1, metric='cosine',step_period=10,window_length=100):
         self.window_length = window_length
+        self.step_period = step_period
         self.training_data = train
         self.test_data = test
         self.labels = None
@@ -58,9 +59,9 @@ class TimeSeriesAnomalyDetectorKNN:
 
     def calc_anomaly(self, mode='expanding'):
         if mode == 'rolling':
-            wf = RollingWalkForward(window_size=1000, step_period=100)
+            wf = RollingWalkForward(window_size=self.window_size, step_period=self.step_period)
         elif mode == 'expanding':
-            wf = ExpandingWalkForward(step_period=100)
+            wf = ExpandingWalkForward(step_period=self.step_period)
         start_index = self.test_data.index[self.window_length]
         self.y_anomaly, _ = wf.run_prediction(X=self.training_data, y=self.test_data,
                                               start_testing_point_index=start_index,
