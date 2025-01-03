@@ -1,8 +1,8 @@
 import numpy as np
 from sklearn.metrics import auc
 import matplotlib.pyplot as plt
-from metrics.timepoint_precision import pointwise_precision
-from metrics.event_recall import event_wise_recall,make_event
+from .timepoint_precision import pointwise_precision
+from .event_recall import event_wise_recall, make_event
 
 def custom_auc_score(y_true, anomaly_scores, threshold_steps=100, plot=False):
 
