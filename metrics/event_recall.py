@@ -1,3 +1,6 @@
+import numpy as np
+
+
 def make_event(y_true, y_pred):
     
     y_true_starts = np.argwhere(np.diff(y_true.flatten(), prepend=0) == 1).flatten()
