@@ -8,12 +8,11 @@ def custom_auc_score(y_true, anomaly_scores, threshold_steps=100, plot=False):
 
 
     # Generate thresholds using percentiles
-    percentiles = np.linspace(0, 100, threshold_steps)
-    thresholds = np.percentile(anomaly_scores, percentiles)
+    percentiles = np.linspace(np.min(anomaly_scores), np.max(anomaly_scores) + 1e-7, threshold_steps)
     precision_list = []
     recall_list = []
 
-    for threshold in thresholds:
+    for threshold in percentiles:
         # Convert anomaly scores to binary predictions based on threshold
         y_pred = (anomaly_scores >= threshold).astype(int)
         
