@@ -6,6 +6,172 @@ import json
 import pandas as pd
 from datetime import datetime
 import seaborn as sns
+import pickle
+
+
+def report_visualizer(pickle_file: str):
+    """
+    Reads a pickle file containing anomaly detection results (thresholds,
+    metrics, anomaly_preds, anomaly_scores) for multiple time-series,
+    determines model names and metric names dynamically, then generates
+    a multi-row visualization for each time-series:
+
+      Row 0  -> Raw time series + true anomalies
+      Row i  -> One row per model (reconstruction error, threshold, predicted anomalies)
+      Row M+1 -> Bar charts of all scalar metrics across all models
+
+    Parameters
+    ----------
+    pickle_file : str
+        Path to the pickle file with stored results
+        (e.g., "per_file_results.pkl").
+    """
+
+    # 1) Load the pickle
+    with open(pickle_file, "rb") as f:
+        all_results = pickle.load(f)
+
+    print(f"Loaded {len(all_results)} entries from '{pickle_file}'.")
+
+    # 2) Loop over each time-series entry in the pickle
+    for entry in all_results:
+        train_file = entry["file"]  # e.g. "/path/to/1_train.npy"
+        base_name = os.path.basename(train_file)
+        result = entry["result"]  # dict with "thresholds" and "metrics"
+        thresholds = result.get("thresholds", {})  # e.g. {"AE": val, "VAE": val, ...}
+        metrics = result.get("metrics", {})  # e.g. {"AE": {...}, "VAE": {...}, ...}
+
+        # If no metrics or thresholds, skip
+        if not metrics or not thresholds:
+            print(f"Skipping {base_name}: no metrics or thresholds found.")
+            continue
+
+        # 3) Dynamically deduce the model names from the 'metrics' dictionary
+        #    e.g. model_names = ["AE", "VAE", "DAE"] (sorted for consistent ordering)
+        model_names = sorted(metrics.keys())
+
+        # 4) Collect all possible keys from each model, then exclude arrays
+        #    like "anomaly_preds", "anomaly_scores".
+        #    Those are used for the reconstruction error rows, not bar charts.
+        all_metric_keys = set()
+        for m in model_names:
+            all_metric_keys.update(metrics[m].keys())
+        # Exclude array-type keys
+        array_keys = {"anomaly_preds", "anomaly_scores"}
+        metric_names = sorted(list(all_metric_keys - array_keys))
+
+        # 5) Build the figure layout
+        #    - We have 1 row for the raw time series
+        #    - Then 1 row per model for reconstruction error
+        #    - Finally 1 row for bar charts of all (scalar) metrics
+        num_models = len(model_names)
+        num_metrics = len(metric_names)
+
+        # So total rows = num_models + 2
+        # columns = max(6, num_metrics) if you want a minimum width,
+        # but let's just do columns = num_metrics for the final row.
+        nrows = num_models + 2
+        ncols = max(1, num_metrics)  # ensure at least 1 col
+
+        fig = plt.figure(figsize=(4 * ncols, 3 * nrows))
+        gs = fig.add_gridspec(nrows, ncols)
+
+        # 6) Load the test data and labels for plotting raw time-series
+        test_file = train_file.replace("_train.npy", "_test.npy")
+        label_file = train_file.replace("_train.npy", "_labels.npy")
+
+        if not os.path.exists(test_file) or not os.path.exists(label_file):
+            print(f"Skipping {base_name}: no matching test/label file found.")
+            continue
+
+        X_test = np.load(test_file)
+        Y_test = np.load(label_file)
+        # Flatten if needed
+        if len(X_test.shape) > 1:
+            X_test = X_test.flatten()
+        if len(Y_test.shape) > 1:
+            Y_test = Y_test.flatten()
+
+        # 7) Plot row 0 => raw time series + true anomalies
+        ax_ts = fig.add_subplot(gs[0, :])  # entire first row
+        time_points = np.arange(len(X_test))
+        ax_ts.plot(time_points, X_test, color='blue', label='Test Data')
+
+        anom_idx = np.where(Y_test == 1)[0]
+        if len(anom_idx) > 0:
+            ax_ts.scatter(anom_idx, X_test[anom_idx], color='red', label='True Anomaly')
+
+        ax_ts.set_title(f"Time Series: {base_name}", fontsize=12)
+        ax_ts.legend()
+
+        # 8) For each model, we place the reconstruction error plot on row (i+1), entire columns
+        for i, m_name in enumerate(model_names):
+            row_idx = i + 1  # row 1..(num_models)
+            ax_err = fig.add_subplot(gs[row_idx, :])
+            model_dict = metrics[m_name]
+            # We expect "anomaly_scores" and "anomaly_preds" in model_dict
+            anomaly_scores = model_dict.get("anomaly_scores", None)
+            anomaly_preds = model_dict.get("anomaly_preds", None)
+            threshold = thresholds.get(m_name, None)
+
+            if anomaly_scores is not None and isinstance(anomaly_scores, np.ndarray):
+                color_map = {"AE": "blue", "VAE": "green", "DAE": "orange"}
+                c = color_map.get(m_name, "black")
+                ax_err.plot(anomaly_scores, color=c, label=f"{m_name} Reconstruction Error")
+                if threshold is not None:
+                    ax_err.axhline(y=threshold, color='red', linestyle='--', label='Threshold')
+                if anomaly_preds is not None and isinstance(anomaly_preds, np.ndarray):
+                    # highlight predicted anomalies
+                    pred_idx = np.where(anomaly_preds == 1)[0]
+                    ax_err.scatter(pred_idx, anomaly_scores[pred_idx], color='red', s=20, label='Predicted Anomaly')
+
+            ax_err.set_title(f"{m_name} Reconstruction Error", fontsize=10)
+            ax_err.legend()
+
+        # 9) Final row => bar charts for each scalar metric
+        bottom_row = num_models + 1
+        # We'll create subplots for each metric_name in columns
+        # If num_metrics == 0, we skip
+        if num_metrics == 0:
+            # No scalar metrics to show
+            plt.tight_layout()
+            plt.show()
+            continue
+
+        axes_metrics = []
+        for col_idx in range(num_metrics):
+            ax = fig.add_subplot(gs[bottom_row, col_idx])
+            axes_metrics.append(ax)
+
+        # Now we fill each column with a bar chart comparing the models
+        for col_idx, metric_name in enumerate(metric_names):
+            ax_bars = axes_metrics[col_idx]
+
+            # Gather metric values from each model
+            vals = []
+            for m_name in model_names:
+                val = metrics[m_name].get(metric_name, np.nan)
+                # Only interpret float/int as valid bar values
+                if isinstance(val, (float, int)):
+                    vals.append(val)
+                else:
+                    vals.append(np.nan)
+
+            # Make a bar plot: x-axis = model_names, y-values = vals
+            color_list = ["skyblue", "lightgreen", "salmon", "lightgray", "yellow"]
+            # in case you have more than 3 models
+            colors = color_list[:len(model_names)]
+            ax_bars.bar(model_names, vals, color=colors)
+            ax_bars.set_title(metric_name, fontsize=10)
+            if not np.all(np.isnan(vals)):
+                ax_bars.set_ylim([0, max(1.0, np.nanmax(vals) * 1.2)])
+            # Annotate bars
+            for j, v in enumerate(vals):
+                if not np.isnan(v):
+                    ax_bars.text(j, v + 0.01, f"{v:.2f}", ha='center', fontsize=9)
+
+        plt.tight_layout()
+        plt.show()
 
 
 def visulizeUCR(inputpreprocessdir,outputfile):
@@ -162,7 +328,7 @@ def visualize_yahoo(dataset_raw_dir, outputfile):
                         if 'anomaly' in df.columns:
                             df.rename(columns={'anomaly': 'is_anomaly'}, inplace=True)
                         if 'timestamps' in df.columns:
-                            df.rename(columns={'timestamps': 'timestamp'}, inplace=True) 
+                            df.rename(columns={'timestamps': 'timestamp'}, inplace=True)
 
                         # Create a new plot for each file
                         plt.figure(figsize=(10, 6))
