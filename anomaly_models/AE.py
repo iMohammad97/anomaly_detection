@@ -138,7 +138,7 @@ def build_lstm_dae(timesteps, features, latent_dim=32, lstm_units=64, mean_coef:
     latent = layers.Dense(latent_dim)(x)
 
     # Apply custom loss to the latent space
-    latent_with_loss = StationaryLoss()(latent, mean_coef, var_coef)
+    latent_with_loss = StationaryLoss()(latent, mean_coef=mean_coef, std_coef=var_coef)
 
     # Decoder
     x = layers.RepeatVector(timesteps)(latent_with_loss)
@@ -150,6 +150,7 @@ def build_lstm_dae(timesteps, features, latent_dim=32, lstm_units=64, mean_coef:
     dae = models.Model(inputs, outputs)
 
     return dae
+
 
 def build_lstm_dae2(timesteps, features, latent_dim=32, lstm_units=64):
     # Encoder
