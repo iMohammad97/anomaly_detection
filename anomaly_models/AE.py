@@ -180,6 +180,7 @@ def build_lstm_dae2(timesteps, features, latent_dim=32, lstm_units=64):
 
     return dae
 
+
 # ADF Loss Layer
 class ADFTestLoss(layers.Layer):
     def call(self, latent, adf_coef: float = 1):
@@ -193,6 +194,13 @@ class ADFTestLoss(layers.Layer):
         adf_loss = adf_loss / latent.shape[-1]
         self.add_loss(adf_coef * adf_loss)
         return latent
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
+
+    def compute_output_signature(self, input_signature):
+        return input_signature
+
 
 # SAE Model Builder
 def build_lstm_sae(timesteps, features, latent_dim=32, lstm_units=64, adf_coef: float = 1):
@@ -215,6 +223,7 @@ def build_lstm_sae(timesteps, features, latent_dim=32, lstm_units=64, adf_coef: 
     sae = tf.keras.models.Model(inputs, outputs)
 
     return sae
+
 
 def train_autoencoder(
         model: tf.keras.Model,
