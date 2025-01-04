@@ -20,9 +20,6 @@ from metrics.auc_pr import compute_auc_pr
 from metrics.auc_event import custom_auc_score
 
 
-########################################################################
-# New function: train_and_evaluate_single_ts
-########################################################################
 def train_and_evaluate_single_ts(
     X_train_raw: np.ndarray,
     X_test_raw: np.ndarray,
@@ -32,11 +29,12 @@ def train_and_evaluate_single_ts(
     batch_size: int = 64,
     latent_dim: int = 32,
     lstm_units: int = 64,
-    threshold_sigma: float = 3.0
+    threshold_sigma: float = 2.0
 ):
     """
     Train AE, VAE, DAE on ONE time-series (train part), then infer on the test part
     and compute metrics (precision, recall, f1, AUC-ROC, AUC-PR, custom AUC).
+    Now also returns anomaly_preds and anomaly_scores for each model in 'metrics'.
 
     Parameters
     ----------
@@ -65,7 +63,16 @@ def train_and_evaluate_single_ts(
         {
           "thresholds": {"AE": val, "VAE": val, "DAE": val},
           "metrics": {
-               "AE":  {"prt": ..., "rece": ..., "fc1": ..., "auc_roc": ..., "auc_pr": ..., "custom_auc": ...},
+               "AE": {
+                   "prt": ...,
+                   "rece": ...,
+                   "fc1": ...,
+                   "auc_roc": ...,
+                   "auc_pr": ...,
+                   "custom_auc": ...,
+                   "anomaly_preds": np.ndarray([...]),
+                   "anomaly_scores": np.ndarray([...])
+               },
                "VAE": {...},
                "DAE": {...}
           }
@@ -101,7 +108,6 @@ def train_and_evaluate_single_ts(
 
     # Reshape to (batch_size, timesteps, features=1) if needed
     if len(train_windows.shape) == 2:
-        # shape (Nwin, window_size) -> (Nwin, window_size, 1)
         X_train_windows = np.expand_dims(train_windows, axis=-1)
     else:
         X_train_windows = train_windows
@@ -118,6 +124,7 @@ def train_and_evaluate_single_ts(
 
     # 6) Compute thresholds for each model from training reconstruction errors
     from anomaly_models.AE import compute_reconstruction_error
+
     def get_threshold(model, train_data):
         rec = model.predict(train_data, verbose=0)
         mse = np.mean(np.square(train_data - rec), axis=(1,2))
@@ -149,13 +156,16 @@ def train_and_evaluate_single_ts(
         auc_pr_val  = compute_auc_pr(Y_test, anomaly_scores)
         custom_auc_val = custom_auc_score(Y_test, anomaly_scores, threshold_steps=100, plot=False)
 
+        # ALSO STORE the raw anomaly_preds and anomaly_scores for later plotting
         return {
             "prt":         prt,
             "rece":        rece,
             "fc1":         fc1,
             "auc_roc":     auc_roc_val,
             "auc_pr":      auc_pr_val,
-            "custom_auc":  custom_auc_val
+            "custom_auc":  custom_auc_val,
+            "anomaly_preds":  anomaly_preds,
+            "anomaly_scores": anomaly_scores
         }
 
     # Evaluate AE, VAE, DAE on the test set
@@ -164,7 +174,7 @@ def train_and_evaluate_single_ts(
     metrics_dict["VAE"] = evaluate_model(model_vae, threshold_vae, X_test_norm, Y_test, window_size)
     metrics_dict["DAE"] = evaluate_model(model_dae, threshold_dae, X_test_norm, Y_test, window_size)
 
-    # 8) Return everything
+    # 8) Return everything, including anomaly_preds / anomaly_scores
     return {
         "thresholds": thresholds_dict,
         "metrics": metrics_dict
