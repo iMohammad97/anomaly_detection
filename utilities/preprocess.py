@@ -10,7 +10,7 @@ from shutil import copyfile
 import matplotlib.pyplot as plt
 
 
-def preprocess_UCR(dataset_raw_dir,dataset_processed_dir):
+def preprocess_UCR(dataset_raw_dir, dataset_processed_dir):
     file_list = os.listdir(dataset_raw_dir)
     dataset_categories = []
     base_directory = dataset_processed_dir
