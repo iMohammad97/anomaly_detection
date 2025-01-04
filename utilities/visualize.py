@@ -220,78 +220,76 @@ def visulizeUCR(inputpreprocessdir,outputfile):
 
 
 
-def visulizeNumenta(inputrawdir,outputfile)
+def visulizeNumenta(inputrawdir,outputfile):
+    # Set the directory paths
+    data_directory = inputrawdir + '/data'
+    labels_file_path = inputrawdir+'/labels/combined_labels.json'
+    labels_interval_file_path = inputrawdir+'/labels/combined_windows.json'
+    pdf_filename = outputfile
 
-# Set the directory paths
-data_directory = inputrawdir + '/data'
-labels_file_path = inputrawdir+'/labels/combined_labels.json'
-labels_interval_file_path = inputrawdir+'/labels/combined_windows.json'
-pdf_filename = outputfile
+    # Read the JSON file with labels
+    with open(labels_file_path, 'r') as file:
+        labels_data = json.load(file)
 
-# Read the JSON file with labels
-with open(labels_file_path, 'r') as file:
-    labels_data = json.load(file)
+    # Read the JSON file with interval labels
+    with open(labels_interval_file_path, 'r') as file:
+        labels_interval_data = json.load(file)
 
-# Read the JSON file with interval labels
-with open(labels_interval_file_path, 'r') as file:
-    labels_interval_data = json.load(file)
+    os.makedirs(os.path.dirname(pdf_filename), exist_ok=True)
 
-os.makedirs(os.path.dirname(pdf_filename), exist_ok=True)
+    with PdfPages(pdf_filename) as pdf:
+        # Iterate through each subdirectory in data_directory
+        for subdirectory in os.listdir(data_directory):
+            subdirectory_path = os.path.join(data_directory, subdirectory)
 
-with PdfPages(pdf_filename) as pdf:
+            # Check if the path is a directory
+            if os.path.isdir(subdirectory_path):
+                # Iterate through each file in the subdirectory
+                for file_name in os.listdir(subdirectory_path):
+                    file_path = os.path.join(subdirectory_path, file_name)
 
-  # Iterate through each subdirectory in data_directory
-  for subdirectory in os.listdir(data_directory):
-      subdirectory_path = os.path.join(data_directory, subdirectory)
+                    # Check if the file is a CSV file
+                    if file_name.endswith('.csv'):
+                        # Check if the filename is in the labels data
+                        df = pd.read_csv(file_path, parse_dates=['timestamp'])
+                        print(df)
+                        # Plot all values in the DataFrame
+                        plt.figure(figsize=(10, 6))
+                        plt.plot(df['timestamp'], df['value'], label=f'{subdirectory}/{file_name} - All Values')
+                        if f'{subdirectory}/{file_name}' in labels_data:
 
-      # Check if the path is a directory
-      if os.path.isdir(subdirectory_path):
-          # Iterate through each file in the subdirectory
-          for file_name in os.listdir(subdirectory_path):
-              file_path = os.path.join(subdirectory_path, file_name)
+                            # Get the timestamps from the labels data
+                            timestamps = labels_data[f'{subdirectory}/{file_name}']
 
-              # Check if the file is a CSV file
-              if file_name.endswith('.csv'):
-                  # Check if the filename is in the labels data
-                  df = pd.read_csv(file_path, parse_dates=['timestamp'])
-                  print(df)
-                  # Plot all values in the DataFrame
-                  plt.figure(figsize=(10, 6))
-                  plt.plot(df['timestamp'], df['value'], label=f'{subdirectory}/{file_name} - All Values')
-                  if f'{subdirectory}/{file_name}' in labels_data:
+                            # Add scatter points for each timestamp in the labels
+                            for timestamp in timestamps:
+                                timestamp_dt = datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
 
-                      # Get the timestamps from the labels data
-                      timestamps = labels_data[f'{subdirectory}/{file_name}']
+                                # Find the corresponding value in the DataFrame
+                                value = df.loc[df['timestamp'] == timestamp_dt, 'value'].values[0]
 
-                      # Add scatter points for each timestamp in the labels
-                      for timestamp in timestamps:
-                          timestamp_dt = datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
+                                # Plot the scatter point without label and in red color
+                                plt.scatter(timestamp_dt, value, color='red', marker='x')
 
-                          # Find the corresponding value in the DataFrame
-                          value = df.loc[df['timestamp'] == timestamp_dt, 'value'].values[0]
+                            # Get the intervals from the interval labels data
+                            intervals = labels_interval_data.get(f'{subdirectory}/{file_name}', [])
 
-                          # Plot the scatter point without label and in red color
-                          plt.scatter(timestamp_dt, value, color='red', marker='x')
+                            # Add scatter points for each interval in the interval labels
+                            for interval in intervals:
+                                start_dt = datetime.strptime(interval[0], '%Y-%m-%d %H:%M:%S.%f')
+                                end_dt = datetime.strptime(interval[1], '%Y-%m-%d %H:%M:%S.%f')
+                                plt.axvspan(start_dt, end_dt, color='orange', alpha=0.3)
 
-                      # Get the intervals from the interval labels data
-                      intervals = labels_interval_data.get(f'{subdirectory}/{file_name}', [])
+                            # Customize the plot for each file
+                        plt.title(f'Plot and Scatter of Labels - {subdirectory}/{file_name}')
+                        plt.xlabel('Timestamp')
+                        plt.ylabel('Value')
+                        plt.xticks(rotation=45)
+                        plt.legend()
 
-                      # Add scatter points for each interval in the interval labels
-                      for interval in intervals:
-                          start_dt = datetime.strptime(interval[0], '%Y-%m-%d %H:%M:%S.%f')
-                          end_dt = datetime.strptime(interval[1], '%Y-%m-%d %H:%M:%S.%f')
-                          plt.axvspan(start_dt, end_dt, color='orange', alpha=0.3)
-
-                      # Customize the plot for each file
-                  plt.title(f'Plot and Scatter of Labels - {subdirectory}/{file_name}')
-                  plt.xlabel('Timestamp')
-                  plt.ylabel('Value')
-                  plt.xticks(rotation=45)
-                  plt.legend()
-
-                  # Save the plot in the PDF file
-                  pdf.savefig()
-                  plt.close()
+                        # Save the plot in the PDF file
+                        pdf.savefig()
+                        plt.close()
 
 
 def visualize_yahoo(dataset_raw_dir, outputfile):
