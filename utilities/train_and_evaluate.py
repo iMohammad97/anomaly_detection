@@ -94,12 +94,16 @@ def train_and_evaluate_single_ts(
         Y_test = Y_test.flatten()
 
     # 2) Compute mean/std from train
-    mean_val = np.mean(X_train_raw)
-    std_val  = np.std(X_train_raw) + 1e-7
+    # mean_val = np.mean(X_train_raw)
+    # std_val  = np.std(X_train_raw) + 1e-7
 
     # 3) Normalize
-    X_train_norm = (X_train_raw - mean_val) / std_val
-    X_test_norm  = (X_test_raw - mean_val) / std_val
+    # X_train_norm = (X_train_raw - mean_val) / std_val
+    # X_test_norm  = (X_test_raw - mean_val) / std_val
+
+    X_train_norm = X_train_raw
+    X_test_norm  = X_test_raw
+
 
     # 4) Create windows for training
     train_windows = create_windows(X_train_norm, window_size)
