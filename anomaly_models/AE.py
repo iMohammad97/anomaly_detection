@@ -138,7 +138,7 @@ def build_lstm_dae(timesteps, features, latent_dim=32, lstm_units=64, mean_coef:
     latent = layers.Dense(latent_dim)(x)
 
     # Apply custom loss to the latent space
-    latent_with_loss = StationaryLoss()(latent, mean_coef, var_coef)
+    latent_with_loss = StationaryLoss()(latent, mean_coef=mean_coef, std_coef=var_coef)
 
     # Decoder
     x = layers.RepeatVector(timesteps)(latent_with_loss)
@@ -150,6 +150,7 @@ def build_lstm_dae(timesteps, features, latent_dim=32, lstm_units=64, mean_coef:
     dae = models.Model(inputs, outputs)
 
     return dae
+
 
 def build_lstm_dae2(timesteps, features, latent_dim=32, lstm_units=64):
     # Encoder
@@ -178,6 +179,50 @@ def build_lstm_dae2(timesteps, features, latent_dim=32, lstm_units=64):
     mse_layer = MSELossLayer()(latent)
 
     return dae
+
+
+# ADF Loss Layer
+class ADFTestLoss(layers.Layer):
+    def call(self, latent, adf_coef: float = 1):
+        adf_loss = 0
+        for i in range(latent.shape[-1]):
+            ts = tf.reshape(latent[:, i], [-1])
+            # Calculate differences using TensorFlow operations
+            ts_diff = ts[1:] - ts[:-1]
+            ts_var = tf.math.reduce_variance(ts_diff)
+            adf_loss += ts_var
+        adf_loss = adf_loss / latent.shape[-1]
+        self.add_loss(adf_coef * adf_loss)
+        return latent
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
+
+    def compute_output_signature(self, input_signature):
+        return input_signature
+
+
+# SAE Model Builder
+def build_lstm_sae(timesteps, features, latent_dim=32, lstm_units=64, adf_coef: float = 1):
+    # Encoder
+    inputs = tf.keras.Input(shape=(timesteps, features))
+    x = layers.LSTM(lstm_units, return_sequences=True)(inputs)
+    x = layers.LSTM(latent_dim, return_sequences=False)(x)
+    latent = layers.Dense(latent_dim)(x)
+
+    # Apply ADF test loss to the latent space
+    latent_with_loss = ADFTestLoss()(latent, adf_coef=adf_coef)
+
+    # Decoder
+    x = layers.RepeatVector(timesteps)(latent_with_loss)
+    x = layers.LSTM(latent_dim, return_sequences=True)(x)
+    x = layers.LSTM(lstm_units, return_sequences=True)(x)
+    outputs = layers.TimeDistributed(layers.Dense(features))(x)
+
+    # SAE Model
+    sae = tf.keras.models.Model(inputs, outputs)
+
+    return sae
 
 
 def train_autoencoder(
