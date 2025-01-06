@@ -10,7 +10,7 @@ from shutil import copyfile
 import matplotlib.pyplot as plt
 
 
-def preprocess_UCR(dataset_raw_dir, dataset_processed_dir):
+def preprocess_UCR(dataset_raw_dir, dataset_processed_dir, split_by_source=False):
     file_list = os.listdir(dataset_raw_dir)
     dataset_categories = []
     base_directory = dataset_processed_dir
@@ -21,10 +21,14 @@ def preprocess_UCR(dataset_raw_dir, dataset_processed_dir):
         filename_parts = filename.split('.')[0].split('_')
         try:
             dataset_number = int(filename_parts[0])
-            dataset_category = filename_parts[3]
-            dataset_categories.append(dataset_category)
-            new_directory_path = os.path.join(base_directory, dataset_category)
-            os.makedirs(new_directory_path, exist_ok=True)
+
+            new_directory_path = None
+            if split_by_source:
+                dataset_category = filename_parts[3]
+                dataset_categories.append(dataset_category)
+                new_directory_path = os.path.join(base_directory, dataset_category)
+                os.makedirs(new_directory_path, exist_ok=True)
+
             train_range, start_anomaly, end_anomaly = map(int, filename_parts[-3:])
         except ValueError:
             print(f"Skipping file {filename}: Invalid filename format.")
@@ -47,8 +51,13 @@ def preprocess_UCR(dataset_raw_dir, dataset_processed_dir):
         anomaly_labels[start_anomaly - train_range:end_anomaly - train_range] = 1
 
         data_splits = {'train': training_data, 'test': testing_data, 'labels': anomaly_labels}
-        for split_name in data_splits:
-            np.save(os.path.join(new_directory_path, f'{dataset_number}_{split_name}.npy'), data_splits[split_name])
+        if split_by_source:
+            for split_name in data_splits:
+                np.save(os.path.join(new_directory_path, f'{dataset_number}_{split_name}.npy'), data_splits[split_name])
+        else:
+            for split_name in data_splits:
+                np.save(os.path.join(dataset_processed_dir, f'{dataset_number}_{split_name}.npy'),
+                        data_splits[split_name])
 
 def preprocess_SMD(dataset_raw_dir, dataset_processed_dir):
     if not os.path.exists(dataset_processed_dir):
