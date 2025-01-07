@@ -79,7 +79,7 @@ class LSTMAutoencoder:
         last_values = [pred[-1] for pred in predictions]
         processed_test_data = [0] * (self.timesteps - 1)
         for predicted_last_value in last_values:
-            processed_test_data.append(processed_instance)
+            processed_test_data.append(predicted_last_value)
         
         # Convert to numpy array if needed for further use
         processed_test_data = np.array(processed_test_data)
