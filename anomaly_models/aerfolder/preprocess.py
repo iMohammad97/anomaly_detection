@@ -6,6 +6,7 @@ from tqdm import tqdm
 
 DATA_PATH = 'UCR/UCR_TimeSeriesAnomalyDatasets2021/FilesAreInHere/UCR_Anomaly_FullData'
 SAVE_TO = 'UCR/AER'
+# TODO edit the path
 
 def build_df(data, start=0):
     index = np.array(range(start, start + len(data)))
