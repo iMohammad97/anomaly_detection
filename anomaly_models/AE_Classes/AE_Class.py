@@ -1,4 +1,7 @@
 from tensorflow.keras import layers, models
+from anomaly_models.AE import create_windows
+
+
 
 class LSTMAutoencoder:
     def __init__(self, train_data, test_data, timesteps: int = 128, features: int = 1, latent_dim: int = 32, lstm_units: int = 64, step_size: int = 1, threshold_sigma=2.0):
