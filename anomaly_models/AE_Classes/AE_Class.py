@@ -4,11 +4,12 @@ import os
 import glob
 import numpy as np
 import tensorflow as tf
+import plotly.graph_objects as go
 
 
 
 class LSTMAutoencoder:
-    def __init__(self, train_data, test_data, timesteps: int = 128, features: int = 1, latent_dim: int = 32, lstm_units: int = 64, step_size: int = 1, threshold_sigma=2.0):
+    def __init__(self, train_data, test_data, labels,timesteps: int = 128, features: int = 1, latent_dim: int = 32, lstm_units: int = 64, step_size: int = 1, threshold_sigma=2.0):
 
         self.train_data = train_data
         self.test_data = test_data 
@@ -20,10 +21,12 @@ class LSTMAutoencoder:
         self.lstm_units = lstm_units
         self.model = None  # Model is not built yet.
         self.threshold = 0
-        self.predictions_windows = None
-        self.anomaly_preds  = None
-        self.anomaly_errors = None
-        self.predictions = None
+        self.predictions_windows = np.zeros(len(self.train_data))
+        self.anomaly_preds  = np.zeros(len(self.train_data))
+        self.anomaly_errors = np.zeros(len(self.train_data))
+        self.predictions = np.zeros(len(self.train_data))
+        self.labels=labels
+        
     def _build_model(self):
 
         inputs = tf.keras.Input(shape=(self.timesteps, self.features), name='input_layer')
@@ -121,4 +124,34 @@ class LSTMAutoencoder:
 
         self.model = tf.keras.models.load_model(path)
         print(f"Model loaded from {path}")
+
+    def plot_results(self):
+        test_data = self.test_data
+        anomaly_preds = self.anomaly_preds
+        anomaly_errors = self.anomaly_errors
+        predictions = self.predictions
+        labels = self.labels
+        # Check if all inputs have the same length
+        if not (len(test_data) == len(labels) == len(anomaly_preds) == len(anomaly_errors) == len(predictions)):
+            raise ValueError("All input arrays must have the same length.")
+        
+        # Create a figure
+        fig = go.Figure()
+        
+        # Add traces for test data, labels, anomaly predictions, anomaly errors, and predictions
+        fig.add_trace(go.Scatter(x=list(range(len(test_data))), y=test_data, mode='lines', name='Test Data', line=dict(color='blue')))
+        fig.add_trace(go.Scatter(x=list(range(len(labels))), y=labels, mode='markers', name='Labels', marker=dict(color='orange', size=8)))  # Modified to use markers
+        fig.add_trace(go.Scatter(x=list(range(len(anomaly_preds))), y=anomaly_preds, mode='markers', name='Anomaly Predictions', marker=dict(color='red', size=5)))
+        fig.add_trace(go.Scatter(x=list(range(len(anomaly_errors))), y=anomaly_errors, mode='lines', name='Anomaly Errors', line=dict(color='green', dash='dot')))
+        fig.add_trace(go.Scatter(x=list(range(len(predictions))), y=predictions, mode='lines', name='Predictions', line=dict(color='purple')))
+        
+        # Set the layout
+        fig.update_layout(title='Test Data and Anomalies',
+                          xaxis_title='Time Steps',
+                          yaxis_title='Value',
+                          legend=dict(x=0, y=1, traceorder='normal', orientation='h'),
+                          template='plotly')
+        
+        # Show the figure
+        fig.show()
  
