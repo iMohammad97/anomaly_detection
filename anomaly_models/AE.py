@@ -120,12 +120,12 @@ class StationaryLoss(layers.Layer):
         # Calculate the average of the latent space
         latent_avg = tf.reduce_mean(latent, axis=0)
         mse_loss = tf.reduce_mean(tf.abs(latent_avg))
-        self.add_loss(mean_coef * mse_loss, inputs=True)  # Tagging for access
+        self.add_loss(mean_coef * mse_loss)  
         
         # Calculate the standard deviation of the latent space
         latent_std = tf.math.reduce_std(latent, axis=0)
         std_loss = tf.reduce_mean(tf.abs(latent_std - 1.0))
-        self.add_loss(std_coef * std_loss, inputs=True)  # Tagging for access
+        self.add_loss(std_coef * std_loss)
         
         # Store the losses separately for logging
         self.mse_loss = mean_coef * mse_loss
