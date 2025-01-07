@@ -78,7 +78,7 @@ class LSTMAutoencoder:
         # Each window i covers timesteps [i, i+window_size-1]
         for i in range(M):
             start = i
-            end = i + self.window_size - 1
+            end = i + self.timesteps - 1
             timestep_errors[start:end + 1] += recon_errors[i]
             counts[start:end + 1] += 1
     
