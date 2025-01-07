@@ -6,7 +6,9 @@ from anomaly_models.AE import (
     create_windows,
     build_lstm_autoencoder,
     build_lstm_vae,
+    build_lstm_dae,
     build_lstm_dae2,
+    build_lstm_sae,
     train_autoencoder,
     infer_anomalies
 )
@@ -123,8 +125,14 @@ def train_and_evaluate_single_ts(
     model_vae = build_lstm_vae(window_size, 1, latent_dim, lstm_units)
     _, model_vae = train_autoencoder(model_vae, X_train_windows, epochs=epochs, batch_size=batch_size)
 
-    model_dae = build_lstm_dae2(window_size, 1, latent_dim, lstm_units)
+    model_sae = build_lstm_sae(window_size, 1, latent_dim, lstm_units)
+    _, model_sae = train_autoencoder(model_sae, X_train_windows, epochs=epochs, batch_size=batch_size)
+
+    model_dae = build_lstm_dae(window_size, 1, latent_dim, lstm_units)
     _, model_dae = train_autoencoder(model_dae, X_train_windows, epochs=epochs, batch_size=batch_size)
+
+    model_dae2 = build_lstm_dae2(window_size, 1, latent_dim, lstm_units)
+    _, model_dae2 = train_autoencoder(model_dae2, X_train_windows, epochs=epochs, batch_size=batch_size)
 
     # 6) Compute thresholds for each model from training reconstruction errors
     from anomaly_models.AE import compute_reconstruction_error
@@ -136,9 +144,11 @@ def train_and_evaluate_single_ts(
 
     threshold_ae  = get_threshold(model_ae,  X_train_windows)
     threshold_vae = get_threshold(model_vae, X_train_windows)
+    threshold_sae = get_threshold(model_sae, X_train_windows)
     threshold_dae = get_threshold(model_dae, X_train_windows)
+    threshold_dae2 = get_threshold(model_dae2, X_train_windows)
 
-    thresholds_dict = {"AE": threshold_ae, "VAE": threshold_vae, "DAE": threshold_dae}
+    thresholds_dict = {"AE": threshold_ae, "VAE": threshold_vae, "SAE": threshold_sae, "DAE": threshold_dae, "DAE2": threshold_dae2}
 
     # 7) Inference: define a helper to run inference + compute metrics on the test
     def evaluate_model(model, threshold, X_test_norm, Y_test, window_size):
@@ -176,7 +186,9 @@ def train_and_evaluate_single_ts(
     metrics_dict = {}
     metrics_dict["AE"]  = evaluate_model(model_ae,  threshold_ae,  X_test_norm, Y_test, window_size)
     metrics_dict["VAE"] = evaluate_model(model_vae, threshold_vae, X_test_norm, Y_test, window_size)
+    metrics_dict["SAE"] = evaluate_model(model_sae, threshold_sae, X_test_norm, Y_test, window_size)
     metrics_dict["DAE"] = evaluate_model(model_dae, threshold_dae, X_test_norm, Y_test, window_size)
+    metrics_dict["DAE2"] = evaluate_model(model_dae2, threshold_dae2, X_test_norm, Y_test, window_size)
 
     # 8) Return everything, including anomaly_preds / anomaly_scores
     return {
