@@ -72,21 +72,19 @@ class LSTMAutoencoder:
         )
 
 
-    def evaluate(self, batch_size=32):
-        import numpy as np
 
-def evaluate(self, batch_size=32):
-    
-    predictions = self.model.predict(self.test_data_window, batch_size=batch_size)
-    last_values = [pred[-1] for pred in predictions]
-    processed_test_data = [0] * (self.timesteps - 1)
-    for predicted_last_value in last_values:
-        processed_test_data.append(processed_instance)
-    
-    # Convert to numpy array if needed for further use
-    processed_test_data = np.array(processed_test_data)
-    
-    return self.model.predict(self.test_data_window),processed_test_data
+    def evaluate(self, batch_size=32):
+        
+        predictions = self.model.predict(self.test_data_window, batch_size=batch_size)
+        last_values = [pred[-1] for pred in predictions]
+        processed_test_data = [0] * (self.timesteps - 1)
+        for predicted_last_value in last_values:
+            processed_test_data.append(processed_instance)
+        
+        # Convert to numpy array if needed for further use
+        processed_test_data = np.array(processed_test_data)
+        
+        return self.model.predict(self.test_data_window),processed_test_data
 
     def get_latent(self, x):
         encoder_model = models.Model(inputs=self.model.input, outputs=self.model.get_layer('latent').output)
