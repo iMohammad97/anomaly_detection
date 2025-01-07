@@ -1,36 +1,37 @@
 class LSTMAutoencoder:
-    def __init__(self, train_data, test_data, timesteps: int, features: int, latent_dim: int = 32, lstm_units: int = 64):
+    def __init__(self, train_data, test_data, timesteps: int, features: int, latent_dim: int = 32, lstm_units: int = 64, window_size: int = 128, threshold_sigma=2.0):
 
         self.train_data = train_data
         self.test_data = test_data 
-        self.train_data_window = create_windows(self.train_data, window_size=128, step_size=1)
-        self.test_data_window = create_windows(self.test_data, window_size=128, step_size=1)
+        self.train_data_window = create_windows(self.train_data, window_size, step_size=1)
+        self.test_data_window = create_windows(self.test_data, window_size, step_size=1)
         self.timesteps = timesteps
         self.features = features
         self.latent_dim = latent_dim
         self.lstm_units = lstm_units
         self.model = None  # Model is not built yet.
+        self.threshold = self.compute_threshold(threshold_sigma=threshold_sigma)
 
     def _build_model(self):
 
-        inputs = tf.keras.Input(shape=(self.timesteps, self.features))
-        x = layers.LSTM(self.lstm_units, return_sequences=True)(inputs)
-        x = layers.LSTM(self.latent_dim, return_sequences=False)(x)
+        inputs = tf.keras.Input(shape=(self.timesteps, self.features), name='input_layer')
+        x = layers.LSTM(self.lstm_units, return_sequences=True, name='lstm_1')(inputs)
+        x = layers.LSTM(self.latent_dim, return_sequences=False, name='lstm_2')(x)
 
         # Decoder
-        x = layers.RepeatVector(self.timesteps)(x)
-        x = layers.LSTM(self.latent_dim, return_sequences=True)(x)
-        x = layers.LSTM(self.lstm_units, return_sequences=True)(x)
-        outputs = layers.TimeDistributed(layers.Dense(self.features))(x)
+        x = layers.RepeatVector(self.timesteps, name='repeat_vector')(x)
+        x = layers.LSTM(self.latent_dim, return_sequences=True, name='lstm_3')(x)
+        x = layers.LSTM(self.lstm_units, return_sequences=True, name='lstm_4')(x)
+        outputs = layers.TimeDistributed(layers.Dense(self.features, name='dense_output'))(x)
 
-        self.model = models.Model(inputs, outputs)
-    
+        self.model = models.Model(inputs, outputs, name='model')
+
         return self.model
 
     def compute_threshold(self, threshold_sigma=2.0):
 
-        rec = self.model.predict(self.train_data_window, verbose=0)
-        mse = np.mean(np.square(self.train_data_window - rec), axis=(1, 2))
+        rec = self.model.predict(self.train_data, verbose=0)
+        mse = np.mean(np.square(self.train_data - rec), axis=(1, 2))
         return np.mean(mse) + threshold_sigma * np.std(mse)
 
     def infer_anomalies(self, threshold, window_size):
@@ -72,4 +73,3 @@ class LSTMAutoencoder:
 
         self.model = tf.keras.models.load_model(path)
         print(f"Model loaded from {path}")
- 
