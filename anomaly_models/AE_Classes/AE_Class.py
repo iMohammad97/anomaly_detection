@@ -1,3 +1,5 @@
+from tensorflow.keras import layers, models
+
 class LSTMAutoencoder:
     def __init__(self, train_data, test_data, timesteps: int, features: int, latent_dim: int = 32, lstm_units: int = 64, window_size: int = 128, threshold_sigma=2.0):
 
@@ -16,7 +18,7 @@ class LSTMAutoencoder:
 
         inputs = tf.keras.Input(shape=(self.timesteps, self.features), name='input_layer')
         x = layers.LSTM(self.lstm_units, return_sequences=True, name='lstm_1')(inputs)
-        x = layers.LSTM(self.latent_dim, return_sequences=False, name='lstm_2')(x)
+        x = layers.LSTM(self.latent_dim, return_sequences=False, name='latent')(x)
 
         # Decoder
         x = layers.RepeatVector(self.timesteps, name='repeat_vector')(x)
@@ -67,6 +69,11 @@ class LSTMAutoencoder:
 
         model = self._build_model()  # Ensure model is built before evaluation.
         return model.evaluate(self.test_data_window, batch_size=batch_size)
+
+    def get_latent(self, x):
+        encoder_model = models.Model(inputs=self.model.input, outputs=self.model.get_layer('latent').output)
+        latent_representations = encoder_model.predict(x)
+        return latent_representations
 
     def save_model(self, path: str):
 
