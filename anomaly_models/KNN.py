@@ -32,17 +32,34 @@ class TimeSeriesAnomalyDetectorKNN:
         return matrix
 
     def train_func(self, X_train, y_train):
-        flattened_train = X_train.to_numpy().flatten()
+        # If X_train is a Pandas DataFrame, you can convert it to NumPy:
+        # flattened_train = X_train.to_numpy().flatten()
+        # If X_train is already a NumPy array, just do:
+        # flattened_train = X_train.flatten()
+
+        # A safe approach: detect type before flattening
+        if hasattr(X_train, "to_numpy"):
+            # It's probably a Pandas object
+            flattened_train = X_train.to_numpy().flatten()
+        else:
+            # It's already a NumPy array
+            flattened_train = X_train.flatten()
+
         if len(flattened_train) < self.window_length:
-            raise ValueError(f"Training data length ({len(flattened_train)}) must be greater than or equal to the window length ({self.window_length}).")
+            raise ValueError(
+                f"Training data length ({len(flattened_train)}) must be greater than or equal to window_length ({self.window_length})."
+            )
+
         self.training_data = self.transform_to_matrix(flattened_train)
         return None
 
     def test_func(self, X_test):
-        flattened_test = X_test.to_numpy().flatten()
-        # print(X_test)
-        # if len(flattened_test) < self.window_length:
-        #     raise ValueError(f"Test data length ({len(flattened_test)}) must be greater than or equal to the window length ({self.window_length}).")
+        # Similarly:
+        if hasattr(X_test, "to_numpy"):
+            flattened_test = X_test.to_numpy().flatten()
+        else:
+            flattened_test = X_test.flatten()
+
         self.test_data = self.transform_to_matrix(flattened_test)
 
         if self.metric == 'cosine':
@@ -52,7 +69,7 @@ class TimeSeriesAnomalyDetectorKNN:
             batch = self.test_data
             distance_matrix = self.calculate_mahalanobis_distances(batch, self.training_data, self.sigma)
 
-        # Find the k smallest distances and sum them up for each test data point in the batch
+        # k smallest distances
         results = np.sum(np.sort(distance_matrix, axis=1)[:, :self.k], axis=1)
         return results
 
