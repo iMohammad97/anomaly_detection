@@ -128,7 +128,10 @@ class LSTMAutoencoder:
         self.model = tf.keras.models.load_model(path)
         print(f"Model loaded from {path}")
 
+    import plotly.graph_objects as go
+
     def plot_results(self):
+        # Flattening arrays to ensure they are 1D
         test_data = self.test_data.ravel()  # Convert to 1D array
         anomaly_preds = self.anomaly_preds  # Already 1D
         anomaly_errors = self.anomaly_errors  # Already 1D
@@ -139,22 +142,57 @@ class LSTMAutoencoder:
         if not (len(test_data) == len(labels) == len(anomaly_preds) == len(anomaly_errors) == len(predictions)):
             raise ValueError("All input arrays must have the same length.")
     
+        # Determine plot width based on length of test_data
+        plot_width = max(800, len(test_data) * 2)  # Ensure a minimum width of 800, scale with data length
+    
         # Create a figure
         fig = go.Figure()
         
-        # Add traces for test data, labels, anomaly predictions, anomaly errors, and predictions
-        fig.add_trace(go.Scatter(x=list(range(len(test_data))), y=test_data, mode='lines', name='Test Data', line=dict(color='blue')))
-        fig.add_trace(go.Scatter(x=list(range(len(labels))), y=labels, mode='markers', name='Labels', marker=dict(color='orange', size=8)))  # Use markers for labels
-        fig.add_trace(go.Scatter(x=list(range(len(anomaly_preds))), y=anomaly_preds, mode='markers', name='Anomaly Predictions', marker=dict(color='red', size=5)))
-        fig.add_trace(go.Scatter(x=list(range(len(anomaly_errors))), y=anomaly_errors, mode='lines', name='Anomaly Errors', line=dict(color='green', dash='dot')))
-        fig.add_trace(go.Scatter(x=list(range(len(predictions))), y=predictions, mode='lines', name='Predictions', line=dict(color='purple')))
-        
+        # Add traces for test data, predictions, and anomaly errors
+        fig.add_trace(go.Scatter(x=list(range(len(test_data))), 
+                                 y=test_data, 
+                                 mode='lines', 
+                                 name='Test Data', 
+                                 line=dict(color='blue')))
+    
+        fig.add_trace(go.Scatter(x=list(range(len(predictions))), 
+                                 y=predictions, 
+                                 mode='lines', 
+                                 name='Predictions', 
+                                 line=dict(color='purple')))
+    
+        fig.add_trace(go.Scatter(x=list(range(len(anomaly_errors))), 
+                                 y=anomaly_errors, 
+                                 mode='lines', 
+                                 name='Anomaly Errors', 
+                                 line=dict(color='red')))
+    
+        # Highlight points in test_data where label is 1
+        label_indices = [i for i in range(len(labels)) if labels[i] == 1]
+        if label_indices:
+            fig.add_trace(go.Scatter(x=label_indices, 
+                                     y=[test_data[i] for i in label_indices], 
+                                     mode='markers', 
+                                     name='Labels on Test Data', 
+                                     marker=dict(color='orange', size=10)))
+    
+        # Highlight points in predictions where anomaly_preds is 1
+        anomaly_pred_indices = [i for i in range(len(anomaly_preds)) if anomaly_preds[i] == 1]
+        if anomaly_pred_indices:
+            fig.add_trace(go.Scatter(x=anomaly_pred_indices, 
+                                     y=[predictions[i] for i in anomaly_pred_indices], 
+                                     mode='markers', 
+                                     name='Anomaly Predictions', 
+                                     marker=dict(color='green', size=10)))
+    
         # Set the layout
-        fig.update_layout(title='Test Data and Anomalies',
+        fig.update_layout(title='Test Data, Predictions, and Anomalies',
                           xaxis_title='Time Steps',
                           yaxis_title='Value',
                           legend=dict(x=0, y=1, traceorder='normal', orientation='h'),
-                          template='plotly')
+                          template='plotly',
+                          width=plot_width)
         
         # Show the figure
-        fig.show() 
+        fig.show()
+
