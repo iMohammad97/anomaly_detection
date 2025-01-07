@@ -31,7 +31,8 @@ def train_and_evaluate_single_ts(
     batch_size: int = 64,
     latent_dim: int = 32,
     lstm_units: int = 64,
-    threshold_sigma: float = 2.0
+    threshold_sigma: float = 2.0,
+    step_size: int = 1
 ):
     """
     Train AE, VAE, DAE on ONE time-series (train part), then infer on the test part
@@ -108,7 +109,7 @@ def train_and_evaluate_single_ts(
 
 
     # 4) Create windows for training
-    train_windows = create_windows(X_train_norm, window_size)
+    train_windows = create_windows(X_train_norm, window_size, step_size)
     if train_windows is None:
         raise ValueError("Training data too short to form windows.")
 
