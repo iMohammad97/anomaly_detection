@@ -73,7 +73,7 @@ class LSTMAutoencoder:
 
 
     def evaluate(self, batch_size=32):
-        return model.evaluate(self.test_data_window, batch_size=batch_size)
+        return self.model.evaluate(self.test_data_window, batch_size=batch_size)
 
     def get_latent(self, x):
         encoder_model = models.Model(inputs=self.model.input, outputs=self.model.get_layer('latent').output)
