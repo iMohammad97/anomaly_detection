@@ -78,7 +78,7 @@ class LSTMAutoencoder:
     def save_model(self, path: str):
 
         model = self._build_model()  # Ensure model is built before saving.
-        model.save(path)
+        self.model.save(path)
         print(f"Model saved to {path}")
 
     def load_model(self, path: str):
