@@ -69,8 +69,6 @@ class LSTMAutoencoder:
 
 
     def evaluate(self, batch_size=32):
-
-        model = self._build_model()  # Ensure model is built before evaluation.
         return model.evaluate(self.test_data_window, batch_size=batch_size)
 
     def get_latent(self, x):
