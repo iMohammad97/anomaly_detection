@@ -33,6 +33,12 @@ if __name__ == '__main__':
     ############ To call preprocess_UCR ##############
     ##################################################
     input_dir = "../UCR/UCR_TimeSeriesAnomalyDatasets2021/FilesAreInHere/UCR_Anomaly_FullData"
-    output_dir = "../UCR/UCR2_preprocessed"
+    # output_dir = "../UCR/UCR2_preprocessed"
+    output_dir = "../UCR/UCR2_preprocessed_by_source"
+    # output_dir = "../UCR/UCR2_preprocessed_by_type"
 
-    preprocess_UCR(input_dir, output_dir)
+    # To only preprocess all the dataset together
+    # preprocess_UCR(input_dir, output_dir)
+
+    # To preprocess the dataset based on TS sources
+    preprocess_UCR(input_dir, output_dir, split_by_source=True)
