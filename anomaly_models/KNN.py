@@ -54,24 +54,59 @@ class TimeSeriesAnomalyDetectorKNN:
         return None
 
     def test_func(self, X_test):
-        # Similarly:
+        """
+        Instead of creating the full distance matrix for all test windows,
+        compute the k-NN distance row by row (or in small batches).
+        This greatly reduces memory usage.
+        """
+        # 1) Flatten
         if hasattr(X_test, "to_numpy"):
             flattened_test = X_test.to_numpy().flatten()
         else:
             flattened_test = X_test.flatten()
 
-        self.test_data = self.transform_to_matrix(flattened_test)
+        # 2) Create test windows
+        self.test_data = self.transform_to_matrix(flattened_test)  # shape (num_test_windows, window_size)
+        # shape of self.training_data is (num_train_windows, window_size)
 
+        # 3) Normalize training data if metric == "cosine"
+        # so we don't do it repeatedly for each row
         if self.metric == 'cosine':
-            batch = self.test_data
-            distance_matrix = self.calculate_cosine_distances(batch, self.training_data)
-        elif self.metric == 'mahalanobis':
-            batch = self.test_data
-            distance_matrix = self.calculate_mahalanobis_distances(batch, self.training_data, self.sigma)
+            train_norms = np.linalg.norm(self.training_data, axis=1)
+            train_normalized = self.training_data / train_norms[:, np.newaxis]
 
-        # k smallest distances
-        results = np.sum(np.sort(distance_matrix, axis=1)[:, :self.k], axis=1)
-        return results
+        # 4) For each test window, compute distances to all train windows,
+        #    find k nearest, sum them.
+        results = []
+        for test_row in self.test_data:
+            if self.metric == 'cosine':
+                # compute dot w/ train_normalized
+                test_norm = np.linalg.norm(test_row)
+                if test_norm == 0.0:
+                    # edge case: if test window is all zeros, set distance = 1?
+                    # or skip. We'll handle by test_norm=1 => distance=1
+                    test_norm = 1e-8
+                test_normalized = test_row / test_norm
+                # similarity = test_normalized ⋅ train_normalized^T => shape (num_train_windows,)
+                similarity = np.dot(train_normalized, test_normalized)
+                dist = 1.0 - similarity  # shape (num_train_windows,)
+            elif self.metric == 'mahalanobis':
+                # compute row-by-row or your existing logic
+                diff = self.training_data - test_row
+                left_term = np.dot(diff, self.sigma)  # shape (num_train_windows, window_size)
+                # Ein-sum each row
+                dist = np.sqrt(np.einsum('ij,ij->i', left_term, diff))
+            else:
+                raise ValueError(f"Unknown metric: {self.metric}")
+
+            # 5) find the k smallest distances and sum them
+            # np.partition is O(n) to find top k, so it’s memory-friendly
+            nearest_k = np.partition(dist, self.k)[:self.k]
+            knn_sum = np.sum(nearest_k)
+            results.append(knn_sum)
+
+        # Convert to a NumPy array, shape (num_test_windows,)
+        return np.array(results)
 
     def calc_anomaly(self, mode='expanding'):
         self.train_func(self.training_data,self.training_data)
