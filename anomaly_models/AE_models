@@ -1,0 +1,169 @@
+import tensorflow as tf
+from tensorflow.keras import layers, models, optimizers
+import numpy as np
+
+############################################
+# Utility functions
+############################################
+
+def impute_nans(X: np.ndarray):
+    if X.size == 0 or np.isnan(X).all():
+        return None
+    mean_val = np.nanmean(X)
+    X = np.where(np.isnan(X), mean_val, X)
+    return X
+
+def create_windows(data, window_size: int, step_size: int = 1):
+    N = data.shape[0]
+    if N < window_size:
+        return None
+    return np.stack([data[i:i + window_size] for i in range(0, N - window_size + 1, step_size)], axis=0)
+
+############################################
+# Model Classes
+############################################
+
+class LSTMAutoencoder:
+    def __init__(self, timesteps, features, latent_dim=32, lstm_units=64):
+        self.timesteps = timesteps
+        self.features = features
+        self.latent_dim = latent_dim
+        self.lstm_units = lstm_units
+        self.model = self.build_model()
+
+    def build_model(self):
+        inputs = tf.keras.Input(shape=(self.timesteps, self.features))
+        x = layers.LSTM(self.lstm_units, return_sequences=True)(inputs)
+        x = layers.LSTM(self.latent_dim, return_sequences=False)(x)
+        x = layers.RepeatVector(self.timesteps)(x)
+        x = layers.LSTM(self.latent_dim, return_sequences=True)(x)
+        x = layers.LSTM(self.lstm_units, return_sequences=True)(x)
+        outputs = layers.TimeDistributed(layers.Dense(self.features))(x)
+        return models.Model(inputs, outputs)
+
+class LSTMVariationalAutoencoder:
+    class Sampling(layers.Layer):
+        def call(self, inputs):
+            z_mean, z_log_var = inputs
+            batch = tf.shape(z_mean)[0]
+            dim = tf.shape(z_mean)[1]
+            epsilon = tf.keras.backend.random_normal(shape=(batch, dim))
+            return z_mean + tf.exp(0.5 * z_log_var) * epsilon
+
+    def __init__(self, timesteps, features, latent_dim=32, lstm_units=64):
+        self.timesteps = timesteps
+        self.features = features
+        self.latent_dim = latent_dim
+        self.lstm_units = lstm_units
+        self.model = self.build_model()
+
+    def build_model(self):
+        inputs = tf.keras.Input(shape=(self.timesteps, self.features))
+        x = layers.LSTM(self.lstm_units, return_sequences=True)(inputs)
+        x = layers.LSTM(self.latent_dim, return_sequences=False)(x)
+        z_mean = layers.Dense(self.latent_dim)(x)
+        z_log_var = layers.Dense(self.latent_dim)(x)
+        z = self.Sampling()([z_mean, z_log_var])
+
+        x = layers.RepeatVector(self.timesteps)(z)
+        x = layers.LSTM(self.latent_dim, return_sequences=True)(x)
+        x = layers.LSTM(self.lstm_units, return_sequences=True)(x)
+        outputs = layers.TimeDistributed(layers.Dense(self.features))(x)
+
+        vae = models.Model(inputs, outputs)
+
+        class KLDivergenceLayer(layers.Layer):
+            def call(self, inputs):
+                z_mean, z_log_var = inputs
+                kl_loss = -0.5 * tf.reduce_mean(z_log_var - tf.square(z_mean) - tf.exp(z_log_var) + 1)
+                self.add_loss(kl_loss)
+                return z_mean
+
+        KLDivergenceLayer()([z_mean, z_log_var])
+        return vae
+
+class LSTMStationaryAutoencoder:
+    class StationaryLoss(layers.Layer):
+        def call(self, latent, mean_coef=1.0, std_coef=1.0):
+            latent_avg = tf.reduce_mean(latent, axis=0)
+            mse_loss = tf.reduce_mean(tf.abs(latent_avg))
+            self.add_loss(mean_coef * mse_loss)
+
+            latent_std = tf.math.reduce_std(latent, axis=0)
+            std_loss = tf.reduce_mean(tf.abs(latent_std - 1.0))
+            self.add_loss(std_coef * std_loss)
+
+            return latent
+
+    def __init__(self, timesteps, features, latent_dim=32, lstm_units=64, mean_coef=1.0, std_coef=1.0):
+        self.timesteps = timesteps
+        self.features = features
+        self.latent_dim = latent_dim
+        self.lstm_units = lstm_units
+        self.mean_coef = mean_coef
+        self.std_coef = std_coef
+        self.model = self.build_model()
+
+    def build_model(self):
+        inputs = tf.keras.Input(shape=(self.timesteps, self.features))
+        x = layers.LSTM(self.lstm_units, return_sequences=True)(inputs)
+        x = layers.LSTM(self.latent_dim, return_sequences=False)(x)
+        latent = layers.Dense(self.latent_dim)(x)
+        latent_with_loss = self.StationaryLoss()(latent, mean_coef=self.mean_coef, std_coef=self.std_coef)
+
+        x = layers.RepeatVector(self.timesteps)(latent_with_loss)
+        x = layers.LSTM(self.latent_dim, return_sequences=True)(x)
+        x = layers.LSTM(self.lstm_units, return_sequences=True)(x)
+        outputs = layers.TimeDistributed(layers.Dense(self.features))(x)
+
+        return models.Model(inputs, outputs)
+
+############################################
+# Training and Inference
+############################################
+
+def train_model(model, X_train_windows, epochs=10, batch_size=64, learning_rate=0.001, validation_split=0.1):
+    optimizer = optimizers.Adam(learning_rate=learning_rate, clipnorm=1.0)
+    model.compile(optimizer=optimizer, loss='mse')
+    history = model.fit(
+        X_train_windows, X_train_windows,
+        epochs=epochs,
+        batch_size=batch_size,
+        validation_split=validation_split,
+        verbose=1
+    )
+    return history, model
+
+def compute_reconstruction_error(model, data_windows):
+    recon = model.predict(data_windows, verbose=0)
+    mse = np.mean(np.square(data_windows - recon), axis=(1, 2))
+    return mse
+
+def infer_anomalies(model, X_test_norm, threshold, window_size):
+    length = X_test_norm.shape[0]
+    test_windows = create_windows(X_test_norm, window_size)
+    if test_windows is None:
+        return np.zeros(length, dtype=int), np.zeros(length, dtype=float)
+
+    if np.isnan(test_windows).any():
+        test_windows = np.nan_to_num(test_windows, nan=0.0)
+
+    if len(test_windows.shape) == 2:
+        test_windows = np.expand_dims(test_windows, axis=-1)
+
+    test_recon_errors = compute_reconstruction_error(model, test_windows)
+    timestep_errors = assign_window_errors_to_timesteps(test_recon_errors, length, window_size)
+    anomaly_preds = (timestep_errors > threshold).astype(int)
+
+    return anomaly_preds, timestep_errors
+
+def assign_window_errors_to_timesteps(window_errors, length, window_size):
+    M = window_errors.shape[0]
+    timestep_errors = np.zeros(length)
+    counts = np.zeros(length)
+    for i in range(M):
+        start, end = i, i + window_size - 1
+        timestep_errors[start:end + 1] += window_errors[i]
+        counts[start:end + 1] += 1
+    counts[counts == 0] = 1
+    return timestep_errors / counts
