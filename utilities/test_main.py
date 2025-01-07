@@ -2,7 +2,6 @@ from utilities.preprocess import preprocess_UCR
 from utilities.visualize import visualizeUCR
 
 if __name__ == '__main__':
-
     ##################################################
     ############## To call visualizeUCR ##############
     ##################################################
@@ -26,19 +25,20 @@ if __name__ == '__main__':
     # visualizeUCR(input_dir, output_dir, mode=3, anomalies_type_csv=anomalies_type_csv_path,
     #              output_pdfs_path=output_pdfs_path)
 
-
-
-
     ##################################################
     ############ To call preprocess_UCR ##############
     ##################################################
-    input_dir = "../UCR/UCR_TimeSeriesAnomalyDatasets2021/FilesAreInHere/UCR_Anomaly_FullData"
+    # input_dir = "../UCR/UCR_TimeSeriesAnomalyDatasets2021/FilesAreInHere/UCR_Anomaly_FullData"
     # output_dir = "../UCR/UCR2_preprocessed"
-    output_dir = "../UCR/UCR2_preprocessed_by_source"
+    # output_dir = "../UCR/UCR2_preprocessed_by_source"
     # output_dir = "../UCR/UCR2_preprocessed_by_type"
+    # anomalies_type_csv_path = "anomaly_types.csv"
 
     # To only preprocess all the dataset together
     # preprocess_UCR(input_dir, output_dir)
 
     # To preprocess the dataset based on TS sources
-    preprocess_UCR(input_dir, output_dir, split_by_source=True)
+    # preprocess_UCR(input_dir, output_dir, split_by_source=True)
+
+    # To preprocess the dataset based on TS anomaly type
+    # preprocess_UCR(input_dir, output_dir, split_by_anomaly_type=True, anomalies_type_csv=anomalies_type_csv_path)
