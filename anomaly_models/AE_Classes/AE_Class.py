@@ -21,6 +21,9 @@ class LSTMAutoencoder:
         self.model = None  # Model is not built yet.
         self.threshold = 0
         self.predictions_windows = None
+        self.anomaly_preds  = None
+        self.anomaly_errors = None
+        self.predictions = None
     def _build_model(self):
 
         inputs = tf.keras.Input(shape=(self.timesteps, self.features), name='input_layer')
@@ -86,9 +89,22 @@ class LSTMAutoencoder:
         timestep_errors /= counts  # Average overlapping windows
     
         # Generate anomaly predictions based on the threshold
-        anomaly_preds = (timestep_errors > self.threshold).astype(int)
-        
-        return anomaly_preds, timestep_errors
+        self.anomaly_preds   = (timestep_errors > self.threshold).astype(int)
+        self.anomaly_errors = timestep_errors
+
+        for i in range(M):
+            for j in range(self.timesteps):
+                timestep_index = i + j  # This is the index in the timestep corresponding to the current prediction
+                if timestep_index < length:  # Ensure we don't go out of bounds
+                    self.predictions[timestep_index] += self.predictions_windows[i, j]  # Accumulate each prediction appropriately
+    
+        # Divide by counts to get the average prediction
+        for i in range(length):
+            if counts[i] > 0:
+                self.predictions[i] /= counts[i]
+
+    # You can additionally handle any NaN values here if necessary
+        self.predictions = np.nan_to_num(self.predictions) 
 
     def get_latent(self, x):
         encoder_model = models.Model(inputs=self.model.input, outputs=self.model.get_layer('latent').output)
