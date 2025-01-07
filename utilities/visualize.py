@@ -174,57 +174,224 @@ def report_visualizer(pickle_file: str):
         plt.show()
 
 
-def visulizeUCR(inputpreprocessdir,outputfile):
+def visualizeUCR(
+        inputpreprocessdir,
+        outputfile,
+        mode=0,
+        list_of_ts=None,
+        anomalies_type_csv=None,
+        anomaly_type=None,
+        output_pdfs_path=None
+):
+    """
+    Visualize UCR Time-Series (Train/Test/Labels) data in different modes.
 
+    :param inputpreprocessdir: Directory that holds the preprocessed .npy files
+    :param outputfile: PDF file path to save the figures (used for mode=0,1,2 only)
+    :param mode:
+        0 -> Plot all time series in one PDF (outputfile)
+        1 -> Plot only those with IDs in list_of_ts (in one PDF)
+        2 -> Plot only those whose anomaly_type_2 in CSV = anomaly_type (in one PDF)
+        3 -> Generate a separate PDF per each anomaly_type_2 found in CSV (all series).
+             PDFs are created in output_pdfs_path, named after the anomaly_type_2.
+    :param list_of_ts: List of strings representing IDs to plot in mode=1
+    :param anomalies_type_csv: Path to CSV file with columns ['name', 'anomaly_type_2']
+    :param anomaly_type: The anomaly_type we want to filter on in mode=2
+    :param output_pdfs_path: Directory to save multiple PDFs when mode=3
+    """
+
+    # =========== Prepare Data from CSV (if needed) ============
+    # For modes 2 and 3, we'll need the CSV data
+    df_csv = None
+    if (mode == 2 or mode == 3) and anomalies_type_csv is not None:
+        df_csv = pd.read_csv(anomalies_type_csv, sep=';', dtype=str)
+        # Make sure columns 'name' and 'anomaly_type_2' exist
+        if not {'name', 'anomaly_type_2'}.issubset(df_csv.columns):
+            raise ValueError("CSV must contain 'name' and 'anomaly_type_2' columns.")
+
+    # =========== Load Preprocessed Data into data_list ============
     data_list = []
+    for file in sorted(os.listdir(inputpreprocessdir)):
+        if 'train' in file.lower():
+            train_filepath = os.path.join(inputpreprocessdir, file)
 
-    for file in sorted(os.listdir(inputdir)):
-        filepath = os.path.join(inputdir+ '/', file)
-        if 'train' in filepath.lower():
-            data = np.load(filepath)
-            print("Data from file '{}': ".format(filepath))
-            data_list.append(data)
-            f2 = filepath.replace('train', 'test')
-            data_test = np.load(f2)
-            print("Data from file '{}': ".format(f2))
-            data_list.append(data_test)
-            f3 = filepath.replace('train', 'labels')
-            data_labels = np.load(f3)
-            print("Data from file '{}': ".format(f3))
-            data_list.append(data_labels)
+            # Extract the ID by removing '_train.npy' (or adjust if your naming differs)
+            base_name = file.replace('_train.npy', '')
 
-    # Create a PDF file with wider pages
+            # Build paths for test/labels
+            test_filepath = os.path.join(inputpreprocessdir, file.replace('train', 'test'))
+            labels_filepath = os.path.join(inputpreprocessdir, file.replace('train', 'labels'))
+
+            # Load arrays
+            train_data = np.load(train_filepath)
+            test_data = np.load(test_filepath)
+            labels_data = np.load(labels_filepath)
+
+            # Store them
+            data_list.append({
+                'id': base_name,  # e.g. "100"
+                'train': train_data,
+                'test': test_data,
+                'labels': labels_data,
+                'full_train_file_name': file  # e.g. "100_train.npy"
+            })
+
+    # =========== Convert data_list into a dict for easy lookup ============
+    #    key = ts_id, value = dict with train/test/labels
+    data_dict = {item['id']: item for item in data_list}
+
+    # =========== Handle Mode 3: Multiple PDFs, one per anomaly type ============
+    if mode == 3:
+        if df_csv is None:
+            raise ValueError("For mode=3, you must provide anomalies_type_csv.")
+        if not output_pdfs_path:
+            raise ValueError("For mode=3, you must provide output_pdfs_path.")
+
+        # Group the CSV by anomaly_type_2
+        grouped = df_csv.groupby('anomaly_type_2')
+
+        # Ensure output directory exists
+        os.makedirs(output_pdfs_path, exist_ok=True)
+
+        # For each anomaly_type_2 => separate PDF
+        for anomaly_value, group_df in grouped:
+            # Build PDF filename => e.g. /some/path/spike.pdf
+            pdf_filename = os.path.join(output_pdfs_path, f"{anomaly_value}.pdf")
+
+            with PdfPages(pdf_filename, keep_empty=False) as pdf:
+                # For each row in this group, plot the corresponding time-series
+                for row in group_df.itertuples(index=False):
+                    # row has attributes = (name='...', anomaly_type_2='...')
+                    ts_id = row.name  # from 'name' column
+                    # If that ts_id does not exist in data_dict, skip
+                    if ts_id not in data_dict:
+                        continue
+
+                    item = data_dict[ts_id]
+                    train = item['train']
+                    test = item['test']
+                    labels = item['labels']
+                    full_name = item['full_train_file_name']
+
+                    # Plot
+                    # plt.figure(figsize=(11.69, 8.27))  # A4 => 11.69 x 8.27 (Landscape)
+                    plt.figure(figsize=(100, 5))  # Set figure width to 15 inches
+                    # Or portrait => (8.27, 11.69)
+
+                    # Train (blue)
+                    plt.plot(train, label='Train Data', color='blue')
+
+                    # Test (green)
+                    plt.plot(
+                        np.arange(len(train), len(train) + len(test)),
+                        test,
+                        color='green',
+                        label='Test Data'
+                    )
+
+                    # Mark anomalies (1) with red X
+                    anomaly_mask = (labels == 1)
+                    plt.scatter(
+                        np.where(anomaly_mask)[0] + len(train),
+                        test[anomaly_mask],
+                        color='red',
+                        marker='x',
+                        label='Test Data (Label=1)'
+                    )
+
+                    plt.xlabel('Data Index')
+                    plt.ylabel('Data Value')
+
+                    # Title lines
+                    title_lines = [
+                        f"Full file name: {full_name}",
+                        f"Time-Series ID: {ts_id}",
+                        f"Anomaly type: {anomaly_value}"
+                    ]
+                    plt.title("\n".join(title_lines), fontsize=12, pad=10)
+                    plt.legend()
+
+                    pdf.savefig()
+                    plt.close()
+
+            print(f"PDF saved to: {pdf_filename}")
+
+        return  # Done with mode=3 => we do not execute the rest of the function
+
+    # =========== Otherwise (modes 0,1,2) => Single PDF ============
+
+    # If mode=2, build a quick lookup dictionary for anomaly_type checks
+    anomaly_dict = {}
+    if mode == 2 and df_csv is not None and anomaly_type is not None:
+        # Create a dict => "name" -> "anomaly_type_2"
+        anomaly_dict = dict(zip(df_csv['name'], df_csv['anomaly_type_2']))
+
     pdf_filename = outputfile
     with PdfPages(pdf_filename, keep_empty=False) as pdf:
-        # Plot each data and save to the PDF
-        for i in range(0, len(data_list), 3):
+        # Iterate through data_list
+        for item in data_list:
+            ts_id = item['id']
+            train = item['train']
+            test = item['test']
+            labels = item['labels']
+            full_name = item['full_train_file_name']
+
+            # --- Decide if we should skip or plot based on mode ---
+            if mode == 0:
+                # Plot all => no skip
+                pass
+            elif mode == 1:
+                # Only if ts_id in list_of_ts
+                if not list_of_ts or ts_id not in list_of_ts:
+                    continue
+            elif mode == 2:
+                # Only if ts_id in anomaly_dict and matches anomaly_type
+                if ts_id not in anomaly_dict:
+                    continue
+                if anomaly_dict[ts_id] != anomaly_type:
+                    continue
+
+            # -- Plot (same logic as your existing code) --
+            # plt.figure(figsize=(11.69, 8.27))  # A4 (landscape) or (8.27, 11.69) for portrait
             plt.figure(figsize=(100, 5))  # Set figure width to 15 inches
-            train_data = data_list[i]
-            test_data = data_list[i + 1]
-            labels_data = data_list[i + 2]
 
-            # Plotting train data in blue
-            plt.plot(train_data, label='Train Data', color='blue')
+            plt.plot(train, label='Train Data', color='blue')
+            plt.plot(np.arange(len(train), len(train) + len(test)),
+                     test, color='green', label='Test Data')
 
-            # Create a mask based on label values
-            mask = labels_data == 1
-            plt.plot(np.arange(len(train_data), len(train_data) + len(test_data)), test_data, color='green', label='Test Data')
-            plt.scatter(np.where(mask)[0] + len(train_data), test_data[mask], color='red', marker='x', label='Test Data (Label=1)')
+            anomaly_mask = (labels == 1)
+            plt.scatter(np.where(anomaly_mask)[0] + len(train),
+                        test[anomaly_mask],
+                        color='red',
+                        marker='x',
+                        label='Test Data (Label=1)')
 
             plt.xlabel('Data Index')
             plt.ylabel('Data Value')
-            plt.title('Train and Test Data')
+
+            # Build title
+            title_lines = [
+                f"Full file name: {full_name}",
+                f"Time-Series ID: {ts_id}"
+            ]
+            if mode == 2:
+                anomaly_text = anomaly_dict.get(ts_id, "N/A")
+                title_lines.append(f"Anomaly type: {anomaly_text}")
+
+            plt.title("\n".join(title_lines), fontsize=12, pad=10)
             plt.legend()
-            pdf.savefig()  # Save the current figure into a pdf page
+
+            pdf.savefig()
             plt.close()
 
+    print(f"PDF saved to: {pdf_filename}")
 
 
-def visulizeNumenta(inputrawdir,outputfile):
+def visulizeNumenta(inputrawdir, outputfile):
     # Set the directory paths
     data_directory = inputrawdir + '/data'
-    labels_file_path = inputrawdir+'/labels/combined_labels.json'
-    labels_interval_file_path = inputrawdir+'/labels/combined_windows.json'
+    labels_file_path = inputrawdir + '/labels/combined_labels.json'
+    labels_interval_file_path = inputrawdir + '/labels/combined_windows.json'
     pdf_filename = outputfile
 
     # Read the JSON file with labels
@@ -310,7 +477,8 @@ def visualize_yahoo(dataset_raw_dir, outputfile):
             with PdfPages(pdf_filename) as pdf:
                 # List all files in the benchmark directory
                 for file_name in os.listdir(full_dir_path):
-                    if file_name in ["A1Benchmark_all.csv", "A2Benchmark_all.csv", "A3Benchmark_all.csv", "A4Benchmark_all.csv"]:
+                    if file_name in ["A1Benchmark_all.csv", "A2Benchmark_all.csv", "A3Benchmark_all.csv",
+                                     "A4Benchmark_all.csv"]:
                         continue
 
                     # Construct the full path to the current file
@@ -344,8 +512,3 @@ def visualize_yahoo(dataset_raw_dir, outputfile):
                         # Save the current plot to the PDF file
                         pdf.savefig()
                         plt.close()
-
-
-
-
-
