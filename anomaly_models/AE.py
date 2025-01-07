@@ -120,15 +120,18 @@ class StationaryLoss(layers.Layer):
         # Calculate the average of the latent space
         latent_avg = tf.reduce_mean(latent, axis=0)
         mse_loss = tf.reduce_mean(tf.abs(latent_avg))
-        self.add_loss(mean_coef * mse_loss)
-
+        self.add_loss(mean_coef * mse_loss, inputs=True)  # Tagging for access
+        
         # Calculate the standard deviation of the latent space
         latent_std = tf.math.reduce_std(latent, axis=0)
         std_loss = tf.reduce_mean(tf.abs(latent_std - 1.0))
-        self.add_loss(std_coef * std_loss)
-
+        self.add_loss(std_coef * std_loss, inputs=True)  # Tagging for access
+        
+        # Store the losses separately for logging
+        self.mse_loss = mean_coef * mse_loss
+        self.std_loss = std_coef * std_loss
+        
         return latent
-
 
 def build_lstm_dae(timesteps, features, latent_dim=32, lstm_units=64, mean_coef: float = 1, var_coef: float = 1):
     # Encoder
@@ -247,6 +250,7 @@ def train_autoencoder(
         verbose=1
     )
     return history, model
+
 
 
 ############################################
