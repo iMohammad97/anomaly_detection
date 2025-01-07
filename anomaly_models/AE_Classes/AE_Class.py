@@ -129,21 +129,22 @@ class LSTMAutoencoder:
         print(f"Model loaded from {path}")
 
     def plot_results(self):
-        test_data = self.test_data
-        anomaly_preds = self.anomaly_preds
-        anomaly_errors = self.anomaly_errors
-        predictions = self.predictions
-        labels = self.labels
+        test_data = self.test_data.ravel()  # Convert to 1D array
+        anomaly_preds = self.anomaly_preds  # Already 1D
+        anomaly_errors = self.anomaly_errors  # Already 1D
+        predictions = self.predictions  # Already 1D
+        labels = self.labels.ravel()  # Convert to 1D array
+    
         # Check if all inputs have the same length
         if not (len(test_data) == len(labels) == len(anomaly_preds) == len(anomaly_errors) == len(predictions)):
             raise ValueError("All input arrays must have the same length.")
-        
+    
         # Create a figure
         fig = go.Figure()
         
         # Add traces for test data, labels, anomaly predictions, anomaly errors, and predictions
         fig.add_trace(go.Scatter(x=list(range(len(test_data))), y=test_data, mode='lines', name='Test Data', line=dict(color='blue')))
-        fig.add_trace(go.Scatter(x=list(range(len(labels))), y=labels, mode='markers', name='Labels', marker=dict(color='orange', size=8)))  # Modified to use markers
+        fig.add_trace(go.Scatter(x=list(range(len(labels))), y=labels, mode='markers', name='Labels', marker=dict(color='orange', size=8)))  # Use markers for labels
         fig.add_trace(go.Scatter(x=list(range(len(anomaly_preds))), y=anomaly_preds, mode='markers', name='Anomaly Predictions', marker=dict(color='red', size=5)))
         fig.add_trace(go.Scatter(x=list(range(len(anomaly_errors))), y=anomaly_errors, mode='lines', name='Anomaly Errors', line=dict(color='green', dash='dot')))
         fig.add_trace(go.Scatter(x=list(range(len(predictions))), y=predictions, mode='lines', name='Predictions', line=dict(color='purple')))
@@ -156,5 +157,4 @@ class LSTMAutoencoder:
                           template='plotly')
         
         # Show the figure
-        fig.show()
- 
+        fig.show() 
