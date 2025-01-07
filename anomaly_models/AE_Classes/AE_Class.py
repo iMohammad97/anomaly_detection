@@ -65,7 +65,7 @@ class LSTMAutoencoder:
 
 
     def evaluate(self, batch_size=32):
-        length = self.test_data_window.shape[0]
+        length = self.test_data.shape[0]
         self.compute_threshold()
         # Generate predictions for the test data windows
         self.predictions_windows = self.model.predict(self.test_data_window, batch_size=batch_size)
