@@ -10,7 +10,7 @@ class LSTMAutoencoder:
         self.latent_dim = latent_dim
         self.lstm_units = lstm_units
         self.model = None  # Model is not built yet.
-        self.threshold = self.compute_threshold(threshold_sigma=threshold_sigma)
+        self.threshold = 0
 
     def _build_model(self):
 
@@ -28,19 +28,23 @@ class LSTMAutoencoder:
 
         return self.model
 
+
     def compute_threshold(self, threshold_sigma=2.0):
 
-        rec = self.model.predict(self.train_data, verbose=0)
-        mse = np.mean(np.square(self.train_data - rec), axis=(1, 2))
-        return np.mean(mse) + threshold_sigma * np.std(mse)
+        rec = self.model.predict(self.train_data_window, verbose=0)
+        mse = np.mean(np.square(self.train_data_window - rec), axis=(1, 2))
+        self.threshold = np.mean(mse) + threshold_sigma * np.std(mse)
 
-    def infer_anomalies(self, threshold, window_size):
-
-        rec = self.model.predict(self.test_data_window, verbose=0)
-        mse = np.mean(np.square(self.test_data_window - rec), axis=(1, 2))
-        anomaly_preds = mse > threshold
-        anomaly_scores = mse
-        return anomaly_preds, anomaly_scores
+    def infer_anomalies(self):
+        test_windows = create_windows(self.test_data, window_size)
+        if np.isnan(test_windows).any():
+            test_windows = np.nan_to_num(test_windows, nan=0.0)
+        if len(test_windows.shape) == 2:
+            test_windows = np.expand_dims(test_windows, axis=-1)
+        test_recon_errors = compute_reconstruction_error(self.model, test_windows)
+        timestep_errors = assign_window_errors_to_timesteps(test_recon_errors, len(self.test_data), window_size)
+        anomaly_preds = (timestep_errors > self.threshold).astype(int)
+        return anomaly_preds, timestep_errors
 
     def train(self, batch_size=32, epochs=50, window_size=None, step_size=1, optimizer='adam', loss='mse'):
         # Ensure the model is built before training
@@ -58,6 +62,7 @@ class LSTMAutoencoder:
             verbose=1
         )
 
+
     def evaluate(self, batch_size=32, window_size=None, step_size=1):
 
         model = self._build_model()  # Ensure model is built before evaluation.
@@ -73,3 +78,4 @@ class LSTMAutoencoder:
 
         self.model = tf.keras.models.load_model(path)
         print(f"Model loaded from {path}")
+ 
