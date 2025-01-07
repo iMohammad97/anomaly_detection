@@ -1,12 +1,12 @@
 from tensorflow.keras import layers, models
 
 class LSTMAutoencoder:
-    def __init__(self, train_data, test_data, timesteps: int, features: int, latent_dim: int = 32, lstm_units: int = 64, window_size: int = 128, threshold_sigma=2.0):
+    def __init__(self, train_data, test_data, timesteps: int = 128, features: int = 1, latent_dim: int = 32, lstm_units: int = 64, step_size: int = 1, threshold_sigma=2.0):
 
         self.train_data = train_data
         self.test_data = test_data 
-        self.train_data_window = create_windows(self.train_data, window_size, step_size=1)
-        self.test_data_window = create_windows(self.test_data, window_size, step_size=1)
+        self.train_data_window = create_windows(self.train_data, timesteps, step_size=1)
+        self.test_data_window = create_windows(self.test_data, timesteps, step_size=1)
         self.timesteps = timesteps
         self.features = features
         self.latent_dim = latent_dim
