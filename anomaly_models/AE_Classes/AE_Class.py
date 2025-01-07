@@ -20,7 +20,7 @@ class LSTMAutoencoder:
         self.lstm_units = lstm_units
         self.model = None  # Model is not built yet.
         self.threshold = 0
-
+        self.predictions_windows = None
     def _build_model(self):
 
         inputs = tf.keras.Input(shape=(self.timesteps, self.features), name='input_layer')
@@ -44,16 +44,7 @@ class LSTMAutoencoder:
         mse = np.mean(np.square(self.train_data_window - rec), axis=(1, 2))
         self.threshold = np.mean(mse) + threshold_sigma * np.std(mse)
 
-    def infer_anomalies(self):
-        test_windows = create_windows(self.test_data, window_size)
-        if np.isnan(test_windows).any():
-            test_windows = np.nan_to_num(test_windows, nan=0.0)
-        if len(test_windows.shape) == 2:
-            test_windows = np.expand_dims(test_windows, axis=-1)
-        test_recon_errors = compute_reconstruction_error(self.model, test_windows)
-        timestep_errors = assign_window_errors_to_timesteps(test_recon_errors, len(self.test_data), window_size)
-        anomaly_preds = (timestep_errors > self.threshold).astype(int)
-        return anomaly_preds, timestep_errors
+
 
     def train(self, batch_size=32, epochs=50,  optimizer='adam', loss='mse'):
         # Ensure the model is built before training
@@ -74,19 +65,30 @@ class LSTMAutoencoder:
 
 
     def evaluate(self, batch_size=32):
+        length = self.test_data_window.shape[0]
+        self.compute_threshold()
         # Generate predictions for the test data windows
-        predictions = self.model.predict(self.test_data_window, batch_size=batch_size)
+        self.predictions_windows = self.model.predict(self.test_data_window, batch_size=batch_size)
+        mse = np.mean(np.square(self.test_data_window - self.predictions_windows), axis=(1, 2))
+            # Expand errors to original length
+        M = mse.shape[0]
+        timestep_errors = np.zeros(length)
+        counts = np.zeros(length)
+    
+        # Each window i covers timesteps [i, i+window_size-1]
+        for i in range(M):
+            start = i
+            end = i + window_size - 1
+            timestep_errors[start:end + 1] += recon_errors[i]
+            counts[start:end + 1] += 1
+    
+        counts[counts == 0] = 1  # Avoid division by zero
+        timestep_errors /= counts  # Average overlapping windows
+    
+        # Generate anomaly predictions based on the threshold
+        anomaly_preds = (timestep_errors > self.threshold).astype(int)
         
-        reconstructed_last_values = [pred[-1] for pred in predictions]
-        
-        processed_test_data = [0] * (self.timesteps - 1)  # Initial zeros based on timestep config
-        # Append the predicted last values
-        processed_test_data.extend(reconstructed_last_values)
-        
-        # Convert the list to a numpy array
-        processed_test_data = np.array(processed_test_data)
-        
-        return predictions, processed_test_data
+        return anomaly_preds, timestep_errors
 
     def get_latent(self, x):
         encoder_model = models.Model(inputs=self.model.input, outputs=self.model.get_layer('latent').output)
