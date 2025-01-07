@@ -5,8 +5,8 @@ class LSTMAutoencoder:
 
         self.train_data = train_data
         self.test_data = test_data 
-        self.train_data_window = create_windows(self.train_data, timesteps, step_size=1)
-        self.test_data_window = create_windows(self.test_data, timesteps, step_size=1)
+        self.train_data_window = create_windows(self.train_data, timesteps, step_size)
+        self.test_data_window = create_windows(self.test_data, timesteps, step_size)
         self.timesteps = timesteps
         self.features = features
         self.latent_dim = latent_dim
@@ -48,7 +48,7 @@ class LSTMAutoencoder:
         anomaly_preds = (timestep_errors > self.threshold).astype(int)
         return anomaly_preds, timestep_errors
 
-    def train(self, batch_size=32, epochs=50, window_size=None, step_size=1, optimizer='adam', loss='mse'):
+    def train(self, batch_size=32, epochs=50, window_size=None,  optimizer='adam', loss='mse'):
         # Ensure the model is built before training
         self.model = self._build_model()
 
@@ -65,7 +65,7 @@ class LSTMAutoencoder:
         )
 
 
-    def evaluate(self, batch_size=32, window_size=None, step_size=1):
+    def evaluate(self, batch_size=32, window_size=None):
 
         model = self._build_model()  # Ensure model is built before evaluation.
         return model.evaluate(self.test_data_window, batch_size=batch_size)
