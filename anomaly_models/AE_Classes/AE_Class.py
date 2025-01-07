@@ -79,7 +79,7 @@ class LSTMAutoencoder:
         for i in range(M):
             start = i
             end = i + self.timesteps - 1
-            timestep_errors[start:end + 1] += recon_errors[i]
+            timestep_errors[start:end + 1] += mse[i]
             counts[start:end + 1] += 1
     
         counts[counts == 0] = 1  # Avoid division by zero
