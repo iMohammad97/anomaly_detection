@@ -21,10 +21,10 @@ class LSTMAutoencoder:
         self.lstm_units = lstm_units
         self.model = None  # Model is not built yet.
         self.threshold = 0
-        self.predictions_windows = np.zeros(len(self.train_data))
-        self.anomaly_preds  = np.zeros(len(self.train_data))
-        self.anomaly_errors = np.zeros(len(self.train_data))
-        self.predictions = np.zeros(len(self.train_data))
+        self.predictions_windows = np.zeros(len(self.test_data))
+        self.anomaly_preds  = np.zeros(len(self.test_data))
+        self.anomaly_errors = np.zeros(len(self.test_data))
+        self.predictions = np.zeros(len(self.test_data))
         self.labels=labels
         
     def _build_model(self):
@@ -95,11 +95,14 @@ class LSTMAutoencoder:
         self.anomaly_preds   = (timestep_errors > self.threshold).astype(int)
         self.anomaly_errors = timestep_errors
 
+
+        counts = np.zeros(length)
         for i in range(M):
             for j in range(self.timesteps):
                 timestep_index = i + j  # This is the index in the timestep corresponding to the current prediction
                 if timestep_index < length:  # Ensure we don't go out of bounds
                     self.predictions[timestep_index] += self.predictions_windows[i, j]  # Accumulate each prediction appropriately
+                    counts[timestep_index] += 1
     
         # Divide by counts to get the average prediction
         for i in range(length):
