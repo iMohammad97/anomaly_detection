@@ -3,12 +3,12 @@ from torch import nn
 from torch.nn import functional as F
 from torch.autograd import Variable
 import numpy as np
-from tqdm import tqdm, trange
+from tqdm.notebook import tqdm, trange
 
 
 ## DAGMM Model (ICLR 18)
 class DAGMM(nn.Module):
-	def __init__(self, feats):
+	def __init__(self, feats: int = 1):
 		super(DAGMM, self).__init__()
 		self.name = 'DAGMM'
 		self.lr = 0.0001
@@ -34,6 +34,9 @@ class DAGMM(nn.Module):
 			nn.Linear(self.n_hidden, self.n_gmm), nn.Softmax(dim=1),
 		)
 
+		self.optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=1e-5)
+		self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, 5, 0.9)
+
 	def compute_reconstruction(self, x, x_hat):
 		relative_euclidean_distance = (x - x_hat).norm(2, dim=1) / x.norm(2, dim=1)
 		cosine_similarity = F.cosine_similarity(x, x_hat, dim=1)
@@ -41,7 +44,7 @@ class DAGMM(nn.Module):
 
 	def forward(self, x):
 		## Encode Decoder
-		x = x.view(1, -1)
+		x = x.view(-1, self.n)
 		z_c = self.encoder(x)
 		x_hat = self.decoder(z_c)
 		## Compute Reconstructoin
@@ -51,29 +54,31 @@ class DAGMM(nn.Module):
 		gamma = self.estimate(z)
 		return z_c, x_hat.view(-1), z, gamma.view(-1)
 
-	def train_model(self, data, optimizer, scheduler, n_epochs=0):
+	def train_model(self, data, n_epochs):
 		"""Train the model and return the average loss and learning rate."""
+		self.train()
 		l = nn.MSELoss(reduction='none')
 		loss1s, loss2s = [], []
 		for _ in (pbar := trange(n_epochs)):
 			l1s, l2s = [], []
-			for d in tqdm(data, leave=False):
+			for d, _ in tqdm(data, leave=False):
 				_, x_hat, z, gamma = self.forward(d)
 				l1, l2 = l(x_hat, d), l(gamma, d)
 				l1s.append(torch.mean(l1).item())
 				l2s.append(torch.mean(l2).item())
 				loss = torch.mean(l1) + torch.mean(l2)
-				optimizer.zero_grad()
+				self.optimizer.zero_grad()
 				loss.backward()
-				optimizer.step()
-				scheduler.step()
+				self.optimizer.step()
+				self.scheduler.step()
 			l1, l2 = np.mean(l1s), np.mean(l2s)
-			pbar.set_description(f'L1 = {l1},\tL2 = {l2}')
+			pbar.set_description(f'L1 = {l1:.3f},\tL2 = {l2:.3f}')
 			loss1s.append(l1), loss2s.append(l2)
 		return loss1s, loss2s
 
 	def predict(self, data):
 		"""Predict using the model and return the loss and predictions."""
+		self.eval()
 		l = nn.MSELoss(reduction='none')
 		ae1s = []
 		for d in data:
@@ -168,4 +173,3 @@ class Cholesky(torch.autograd.Function):
 			1.0 - Variable(l.data.new(l.size(1)).fill_(0.5).diag()))
 		s = torch.mm(linv.t(), torch.mm(inner, linv))
 		return s
-
