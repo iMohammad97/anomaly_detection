@@ -21,8 +21,8 @@ class UCR(Dataset):
             array = np.load(os.path.join(self.path, file_path))
             for i in range(0, len(array) - self.window_size + 1, self.step_size):
                 windows.append(array[i:i + self.window_size])
-        windows = np.array(windows, dtype=np.float32) # because it's faster
-        return torch.from_numpy(windows)
+        windows = np.array(windows) # because it's faster
+        return torch.tensor(windows, dtype=torch.float32)
 
     def __len__(self):
         return len(self.data)
