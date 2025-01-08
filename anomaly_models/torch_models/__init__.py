@@ -1,2 +1,2 @@
 # Models
-from dgamm import DAGMM # ICRL 2018
+from dagmm import DAGMM # ICRL 2018
