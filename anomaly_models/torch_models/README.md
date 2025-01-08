@@ -9,13 +9,14 @@ sample usage:
 ```python
 from anomaly_models.torch_models import DAGMM
 from utilities.torch_ucr import get_dataloaders
+
 # Dataset
-train_loader, test_loader = get_dataloaders(path='../../UCR/UCR2_preprocessed', window_size=5, batch_size=64)
-# Instantiate 
+dataset_path = '../../UCR/UCR2_preprocessed'
+train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=5, batch_size=64)
+
+# Training 
 model = DAGMM()
-# Train
 model.train_model(train_loader, n_epochs=10)
-# Evaluate
 predictions = model.predict(test_loader)
 ```
 
@@ -28,17 +29,19 @@ sample usage:
 ```python
 from anomaly_models.torch_models import MAD_GAN
 from utilities.torch_ucr import get_dataloaders
+
 # Dataset
-train_loader, test_loader = get_dataloaders(path='../../UCR/UCR2_preprocessed', window_size=5, batch_size=64)
-# Instantiate 
+dataset_path = '../../UCR/UCR2_preprocessed'
+train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=5, batch_size=64)
+
+# Training 
 model = MAD_GAN()
-# Train
 model.train_model(train_loader, n_epochs=10)
 ```
 
-### CAE-M
+## CAE-M
 [Unsupervised Deep Anomaly Detection for Multi-Sensor Time-Series Signals](https://arxiv.org/pdf/2107.12626)
-TKDE 21
+TKDE 2021
 
 sample usage:
 
@@ -47,9 +50,13 @@ from anomaly_models.torch_models import CAE_M
 from utilities.torch_ucr import get_dataloaders
 
 # Dataset
-train_loader, test_loader = get_dataloaders(path='../../UCR/UCR2_preprocessed', window_size=64, batch_size=64)
-# Instantiate 
+dataset_path = '../../UCR/UCR2_preprocessed'
+train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=64, batch_size=64)
+
+# Training  
 model = CAE_M(window_size=64)
-# Train
 model.train_model(train_loader, n_epochs=10)
 ```
+
+# References
+- https://github.com/imperial-qore/TranAD/
