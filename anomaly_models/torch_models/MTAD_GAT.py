@@ -5,7 +5,7 @@ from dgl.nn.pytorch import GATConv
 
 ## MTAD_GAT Model (ICDM 20)
 class MTAD_GAT(nn.Module):
-	def __init__(self, feats):
+	def __init__(self, feats: int = 1):
 		super(MTAD_GAT, self).__init__()
 		self.name = 'MTAD_GAT'
 		self.lr = 0.0001

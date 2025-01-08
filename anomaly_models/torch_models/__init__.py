@@ -5,3 +5,4 @@
 
 from .dagmm import DAGMM
 from .mad_gan import MAD_GAN
+from .cae_m import CAE_M

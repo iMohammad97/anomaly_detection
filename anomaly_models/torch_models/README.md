@@ -35,3 +35,21 @@ model = MAD_GAN()
 # Train
 model.train_model(train_loader, n_epochs=10)
 ```
+
+### CAE-M
+[Unsupervised Deep Anomaly Detection for Multi-Sensor Time-Series Signals](https://arxiv.org/pdf/2107.12626)
+TKDE 21
+
+sample usage:
+
+```python
+from anomaly_models.torch_models import CAE_M
+from utilities.torch_ucr import get_dataloaders
+
+# Dataset
+train_loader, test_loader = get_dataloaders(path='../../UCR/UCR2_preprocessed', window_size=64, batch_size=64)
+# Instantiate 
+model = CAE_M(window_size=64)
+# Train
+model.train_model(train_loader, n_epochs=10)
+```

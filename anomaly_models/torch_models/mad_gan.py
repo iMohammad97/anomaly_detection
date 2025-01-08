@@ -37,6 +37,7 @@ class MAD_GAN(nn.Module):
 		return z, real_score, fake_score
 
 	def train_model(self, train_loader, n_epochs: int):
+		self.train()
 		bcel = nn.BCELoss(reduction='mean')
 		msel = nn.MSELoss(reduction='mean')
 		losses = []
@@ -65,6 +66,7 @@ class MAD_GAN(nn.Module):
 		return losses
 
 	def predict(self, data):
+		self.eval()
 		l = nn.MSELoss(reduction='none')
 		outputs = []
 		for d, a in data:

@@ -29,6 +29,7 @@ class GDN(nn.Module):
 
         # Initialize attention mechanism and fully connected network (FCN)
         self.attention = nn.Sequential(
+            nn.Flatten(),
             nn.Linear(self.n, self.n_hidden), nn.LeakyReLU(True),
             nn.Linear(self.n_hidden, self.n_hidden), nn.LeakyReLU(True),
             nn.Linear(self.n_hidden, self.n_window), nn.Softmax(dim=0),
@@ -40,9 +41,9 @@ class GDN(nn.Module):
 
     def forward(self, data):
         # Bahdanau style attention
-        att_score = self.attention(data).view(self.n_window, 1)
-        data = data.view(self.n_window, self.n_feats)
-        data_r = torch.matmul(data.permute(1, 0), att_score)
+        att_score = self.attention(data).view(-1, self.n_window, 1)
+        data = data.view(-1, self.n_window, self.n_feats)
+        data_r = torch.matmul(data.mT, att_score)
 
         # GAT convolution on complete graph
         feat_r = self.feature_gat(data_r, self.g.edge_index)
@@ -51,10 +52,3 @@ class GDN(nn.Module):
         # Pass through a FCN
         x = self.fcn(feat_r)
         return x.view(-1)
-
-# Example usage
-feats = 10
-model = GDN(feats=feats)
-data = torch.randn(5, feats)  # Example input data
-output = model(data)
-print(output)
