@@ -1,9 +1,9 @@
 # List of (Working!) Models 
 
 ## DAGMM 
-paper: [Deep Autoencoding Gaussian Mixture Model for Unsupervised Anomaly Detection](https://bzong.github.io/doc/iclr18-dagmm.pdf)
-venue: ICLR 2018
-code: 
+[Deep Autoencoding Gaussian Mixture Model for Unsupervised Anomaly Detection](https://bzong.github.io/doc/iclr18-dagmm.pdf)
+ICLR 2018
+
 sample usage:
 
 ```python
