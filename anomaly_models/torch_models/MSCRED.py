@@ -3,33 +3,33 @@ from torch import nn
 
 ## MSCRED Model (AAAI 19)
 class MSCRED(nn.Module):
-	def __init__(self, feats):
-		super(MSCRED, self).__init__()
-		self.name = 'MSCRED'
-		self.lr = 0.0001
-		self.n_feats = feats
-		self.n_window = feats
-		self.encoder = nn.ModuleList([
-			ConvLSTM(1, 32, (3, 3), 1, True, True, False),
-			ConvLSTM(32, 64, (3, 3), 1, True, True, False),
-			ConvLSTM(64, 128, (3, 3), 1, True, True, False),
-			]
-		)
-		self.decoder = nn.Sequential(
-			nn.ConvTranspose2d(128, 64, (3, 3), 1, 1), nn.ReLU(True),
-			nn.ConvTranspose2d(64, 32, (3, 3), 1, 1), nn.ReLU(True),
-			nn.ConvTranspose2d(32, 1, (3, 3), 1, 1), nn.Sigmoid(),
-		)
+    def __init__(self, feats):
+        super(MSCRED, self).__init__()
+        self.name = 'MSCRED'
+        self.lr = 0.0001
+        self.n_feats = feats
+        self.n_window = feats
+        self.encoder = nn.ModuleList([
+            ConvLSTM(1, 32, (3, 3), 1, True, True, False),
+            ConvLSTM(32, 64, (3, 3), 1, True, True, False),
+            ConvLSTM(64, 128, (3, 3), 1, True, True, False),
+            ]
+        )
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose2d(128, 64, (3, 3), 1, 1), nn.ReLU(True),
+            nn.ConvTranspose2d(64, 32, (3, 3), 1, 1), nn.ReLU(True),
+            nn.ConvTranspose2d(32, 1, (3, 3), 1, 1), nn.Sigmoid(),
+        )
 
-	def forward(self, g):
-		## Encode
-		z = g.view(1, 1, self.n_feats, self.n_window)
-		for cell in self.encoder:
-			_, z = cell(z.view(1, *z.shape))
-			z = z[0][0]
-		## Decode
-		x = self.decoder(z)
-		return x.view(-1)
+    def forward(self, g):
+        ## Encode
+        z = g.view(1, 1, self.n_feats, self.n_window)
+        for cell in self.encoder:
+            _, z = cell(z.view(1, *z.shape))
+            z = z[0][0]
+        ## Decode
+        x = self.decoder(z)
+        return x.view(-1)
 
 
 class ConvLSTMCell(nn.Module):
