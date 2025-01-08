@@ -56,7 +56,7 @@ class DAGMM(nn.Module):
 
 	def train_model(self, data, n_epochs):
 		"""Train the model and return the average loss and learning rate."""
-		self.train()
+		self.train(True)
 		l = nn.MSELoss(reduction='none')
 		loss1s, loss2s = [], []
 		for _ in (pbar := trange(n_epochs)):
@@ -81,7 +81,7 @@ class DAGMM(nn.Module):
 		self.eval()
 		l = nn.MSELoss(reduction='none')
 		ae1s = []
-		for d in data:
+		for d, a in data:
 			_, x_hat, _, _ = self.forward(d)
 			ae1s.append(x_hat)
 		ae1s = torch.stack(ae1s)
