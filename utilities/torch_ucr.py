@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 
 class UCR(Dataset):
     def __init__(self, path: str, window_size: int, step_size: int = 1, train: bool = True):
@@ -31,3 +31,12 @@ class UCR(Dataset):
         if self.labels is not None:
             return self.data[idx], self.labels[idx]
         return self.data[idx]
+
+def get_dataloaders(path: str, window_size: int, batch_size: int, step_size: int = 1):
+    # Create datasets
+    train_dataset = UCR(path, window_size, step_size=step_size, train=True)
+    test_dataset = UCR(path, window_size, step_size=step_size, train=False)
+    # Create DataLoaders
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    return train_loader, test_loader
