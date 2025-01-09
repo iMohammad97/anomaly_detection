@@ -1,14 +1,18 @@
 from tensorflow.keras import layers, models
 from anomaly_models.AE import create_windows
 import os
-import glob
+import json
+import pickle
 import numpy as np
 import tensorflow as tf
+from tqdm.notebook import trange
 import plotly.graph_objects as go
+from matplotlib import pyplot as plt
 
 
 class VariationalLSTMAutoencoder:
-    def __init__(self, train_data, test_data, labels,timesteps: int = 128, features: int = 1, latent_dim: int = 32, lstm_units: int = 64, step_size: int = 1, threshold_sigma=2.0):
+    def __init__(self, train_data, test_data, labels, timesteps: int = 128, features: int = 1, latent_dim: int = 32,
+                 lstm_units: int = 64, step_size: int = 1, threshold_sigma=2.0):
 
         self.train_data = train_data
         self.test_data = test_data 
@@ -26,7 +30,7 @@ class VariationalLSTMAutoencoder:
         self.anomaly_errors = np.zeros(len(self.test_data))
         self.predictions = np.zeros(len(self.test_data))
         self.labels=labels
-
+        self.name = 'LSTM_VAE'
     
     def _build_model(self):
         class Sampling(layers.Layer):
@@ -91,10 +95,11 @@ class VariationalLSTMAutoencoder:
         mse_loss_tracker = tf.keras.metrics.Mean(name="mse_loss")
         kl_loss_tracker = tf.keras.metrics.Mean(name="kl_loss")
 
+        losses = {'mse': [], 'kld': []}
+
         # Training loop
-        for epoch in range(epochs):
-            print(f"\nEpoch {epoch + 1}/{epochs}")
-            
+        for epoch in (pbar := trange(epochs)):
+
             mse_loss_tracker.reset_state()
             kl_loss_tracker.reset_state()
             
@@ -118,10 +123,13 @@ class VariationalLSTMAutoencoder:
                 kl_loss_tracker.update_state(kl_loss)
             
             # Log losses after each epoch
-            print(f"Epoch {epoch + 1}: MSE Loss = {mse_loss_tracker.result().numpy()}, "
-                  f"KL Divergence Loss = {kl_loss_tracker.result().numpy()}")
-        
-        print("Training complete.")
+            losses['mse'].append(mse_loss_tracker.result().numpy()), losses['kld'].append(kl_loss_tracker.result().numpy())
+            pbar.set_description(f"MSE Loss = {losses['mse'][-1]:.4f}, KL Divergence Loss = {losses['kld'][-1]:.4f}")
+
+        # Save the loss values in a pickle file
+        with open(f'losses_{self.name}.pkl', 'wb') as f:
+            pickle.dump(losses, f)
+        print(f"Loss values saved to losses_{self.name}.pkl")
 
       
     def evaluate(self, batch_size=32):
@@ -293,3 +301,19 @@ class VariationalLSTMAutoencoder:
         else:
             print("No model found to load.")
 
+
+    def plot_losses(self):
+        # Load the loss values from the pickle file
+        with open(f'losses_{self.name}.pkl', 'rb') as f:
+            loss_values = pickle.load(f)
+
+        # Plot the loss values
+        plt.figure(figsize=(10, 6))
+        plt.plot(loss_values['mse'], label='MSE Loss')
+        plt.plot(loss_values['kld'], label='KLD Loss')
+        plt.xlabel('Epochs')
+        plt.ylabel('Loss')
+        plt.title('Training Loss Over Epochs')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
