@@ -7,8 +7,7 @@ import tensorflow as tf
 import plotly.graph_objects as go
 
 
-
-class LSTMAutoencoder:
+class VariationalLSTMAutoencoder:
     def __init__(self, train_data, test_data, labels,timesteps: int = 128, features: int = 1, latent_dim: int = 32, lstm_units: int = 64, step_size: int = 1, threshold_sigma=2.0):
 
         self.train_data = train_data
@@ -28,7 +27,7 @@ class LSTMAutoencoder:
         self.predictions = np.zeros(len(self.test_data))
         self.labels=labels
         
-    def build_lstm_vae(timesteps, features, latent_dim=32, lstm_units=64):
+    def _build_model(timesteps, features, latent_dim=32, lstm_units=64):
         class Sampling(layers.Layer):
             """Uses (z_mean, z_log_var) to sample z, the vector encoding a digit."""
             def call(self, inputs):
@@ -37,7 +36,7 @@ class LSTMAutoencoder:
                 dim = tf.shape(z_mean)[1]
                 epsilon = tf.keras.backend.random_normal(shape=(batch, dim))
                 return z_mean + tf.exp(0.5 * z_log_var) * epsilon
-    
+
         # Encoder
         inputs = tf.keras.Input(shape=(timesteps, features))
         x = layers.LSTM(lstm_units, return_sequences=True)(inputs)
@@ -45,30 +44,27 @@ class LSTMAutoencoder:
         z_mean = layers.Dense(latent_dim)(x)
         z_log_var = layers.Dense(latent_dim)(x)
         z = Sampling()([z_mean, z_log_var])
-    
+
+        # KL Divergence
+        class KLDivergenceLayer(layers.Layer):
+            def call(self, inputs):
+                z_mean, z_log_var = inputs
+                kl_loss = -0.5 * tf.reduce_sum(
+                    z_log_var - tf.square(z_mean) - tf.exp(z_log_var) + 1, axis=-1)
+                self.add_loss(tf.reduce_mean(kl_loss))  # Add KL divergence to total loss
+                return kl_loss
+
+        kl_loss = KLDivergenceLayer()([z_mean, z_log_var])
+
         # Decoder
         x = layers.RepeatVector(timesteps)(z)
         x = layers.LSTM(latent_dim, return_sequences=True)(x)
         x = layers.LSTM(lstm_units, return_sequences=True)(x)
         outputs = layers.TimeDistributed(layers.Dense(features))(x)
-    
-        # VAE Model
-        vae = models.Model(inputs, outputs)
-    
-        # Custom KL divergence loss layer
-        class KLDivergenceLayer(layers.Layer):
-            def call(self, inputs):
-                z_mean, z_log_var = inputs
-                kl_loss = -0.5 * tf.reduce_mean(
-                    z_log_var - tf.square(z_mean) - tf.exp(z_log_var) + 1)
-                self.add_loss(kl_loss)
-                return z_mean
-    
-        kl_layer = KLDivergenceLayer()([z_mean, z_log_var])
-    
-        return vae
-    
 
+        # VAE Model
+        vae = models.Model(inputs, [outputs, kl_loss])  # Return both outputs and KL loss
+        return vae
 
     def compute_threshold(self):
 
@@ -77,23 +73,36 @@ class LSTMAutoencoder:
         self.threshold = np.mean(mse) + self.threshold_sigma * np.std(mse)
 
 
-
-    def train(self, batch_size=32, epochs=50,  optimizer='adam', loss='mse'):
-        # Ensure the model is built before training
+    def train(self, batch_size=32, epochs=50, optimizer='adam'):
         self.model = self._build_model()
 
-        # Compile the model with the specified optimizer and loss function
-        self.model.compile(optimizer=optimizer, loss=loss)
+        # Custom training step to log MSE and KL losses
+        mse_loss_tracker = tf.keras.metrics.Mean(name="mse_loss")
+        kl_loss_tracker = tf.keras.metrics.Mean(name="kl_loss")
 
-        # Train the model
-        self.model.fit(
-            self.train_data_window, self.train_data_window,  # Use self.train_data for both input and output
-            batch_size=batch_size,
-            validation_split=0.1,  # Split 10% of the training data for validation
-            epochs=epochs,
-            verbose=1
-        )
+        @tf.function
+        def train_step(x):
+            with tf.GradientTape() as tape:
+                outputs, kl_loss = self.model(x, training=True)
+                mse_loss = tf.reduce_mean(tf.keras.losses.mse(x, outputs))
+                total_loss = mse_loss + kl_loss
+            grads = tape.gradient(total_loss, self.model.trainable_weights)
+            self.model.optimizer.apply_gradients(zip(grads, self.model.trainable_weights))
 
+            mse_loss_tracker.update_state(mse_loss)
+            kl_loss_tracker.update_state(kl_loss)
+            return total_loss
+
+        # Custom training loop
+        for epoch in range(epochs):
+            print(f"Epoch {epoch + 1}/{epochs}")
+            for step, x_batch_train in enumerate(self.train_data_window):
+                loss = train_step(x_batch_train)
+                print(f"Step {step + 1}: total_loss = {loss.numpy()}, mse_loss = {mse_loss_tracker.result().numpy()}, kl_loss = {kl_loss_tracker.result().numpy()}")
+
+            # Reset metrics at the end of the epoch
+            mse_loss_tracker.reset_states()
+            kl_loss_tracker.reset_states()
 
 
     def evaluate(self, batch_size=32):
@@ -264,5 +273,4 @@ class LSTMAutoencoder:
             print(f"Model loaded from {model_path}")
         else:
             print("No model found to load.")
-
 
