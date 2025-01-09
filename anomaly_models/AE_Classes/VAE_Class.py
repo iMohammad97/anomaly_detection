@@ -38,7 +38,7 @@ class VariationalLSTMAutoencoder:
               dim = tf.shape(z_mean)[1]
               epsilon = tf.keras.backend.random_normal(shape=(batch, dim))
               return z_mean + tf.exp(0.5 * z_log_var) * epsilon
-  
+        
         # Encoder
         inputs = tf.keras.Input(shape=(timesteps, features))
         x = layers.LSTM(lstm_units, return_sequences=True)(inputs)
@@ -58,16 +58,16 @@ class VariationalLSTMAutoencoder:
         
         # Custom KL divergence loss layer
         class KLDivergenceLayer(layers.Layer):
-          def call(self, inputs):
-              z_mean, z_log_var = inputs
-              kl_loss = -0.5 * tf.reduce_mean(
+            def call(self, inputs):
+                z_mean, z_log_var = inputs
+                kl_loss = -0.5 * tf.reduce_mean(
                   z_log_var - tf.square(z_mean) - tf.exp(z_log_var) + 1)
-              self.add_loss(kl_loss)
-              return z_mean
+                self.add_loss(kl_loss)
+                return z_mean
         
         kl_layer = KLDivergenceLayer()([z_mean, z_log_var])
-  
-      return vae
+
+        return vae
     
     
   
