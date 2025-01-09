@@ -84,17 +84,20 @@ class VariationalLSTMAutoencoder:
         
         self._build_model()  # Build the model
         
+        # Loss function
+        mse_loss_fn = tf.keras.losses.MeanSquaredError()
+
         # Track losses
         mse_loss_tracker = tf.keras.metrics.Mean(name="mse_loss")
         kl_loss_tracker = tf.keras.metrics.Mean(name="kl_loss")
-    
+
         # Training loop
         for epoch in range(epochs):
             print(f"\nEpoch {epoch + 1}/{epochs}")
             
             mse_loss_tracker.reset_state()
             kl_loss_tracker.reset_state()
-
+            
             for step in range(0, len(self.train_data_window), batch_size):
                 batch_data = self.train_data_window[step:step + batch_size]
                 
@@ -103,7 +106,7 @@ class VariationalLSTMAutoencoder:
                     reconstructed, kl_loss = self.model(batch_data, training=True)
                     
                     # Compute losses
-                    mse_loss = tf.reduce_mean(tf.keras.losses.mean_squared_error(batch_data, reconstructed))
+                    mse_loss = mse_loss_fn(batch_data, reconstructed)  # Use MeanSquaredError class
                     total_loss = mse_loss + tf.reduce_mean(kl_loss)
                 
                 # Compute gradients and update weights
