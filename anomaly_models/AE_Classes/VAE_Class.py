@@ -29,43 +29,43 @@ class VariationalLSTMAutoencoder:
         self.labels=labels
         
 
-  def build_lstm_vae(timesteps, features, latent_dim=32, lstm_units=64):
-      class Sampling(layers.Layer):
+    def build_lstm_vae(timesteps, features, latent_dim=32, lstm_units=64):
+        class Sampling(layers.Layer):
           """Uses (z_mean, z_log_var) to sample z, the vector encoding a digit."""
-          def call(self, inputs):
+            def call(self, inputs):
               z_mean, z_log_var = inputs
               batch = tf.shape(z_mean)[0]
               dim = tf.shape(z_mean)[1]
               epsilon = tf.keras.backend.random_normal(shape=(batch, dim))
               return z_mean + tf.exp(0.5 * z_log_var) * epsilon
   
-      # Encoder
-      inputs = tf.keras.Input(shape=(timesteps, features))
-      x = layers.LSTM(lstm_units, return_sequences=True)(inputs)
-      x = layers.LSTM(latent_dim, return_sequences=False)(x)
-      z_mean = layers.Dense(latent_dim)(x)
-      z_log_var = layers.Dense(latent_dim)(x)
-      z = Sampling()([z_mean, z_log_var])
-  
-      # Decoder
-      x = layers.RepeatVector(timesteps)(z)
-      x = layers.LSTM(latent_dim, return_sequences=True)(x)
-      x = layers.LSTM(lstm_units, return_sequences=True)(x)
-      outputs = layers.TimeDistributed(layers.Dense(features))(x)
-  
-      # VAE Model
-      vae = models.Model(inputs, outputs)
-  
-      # Custom KL divergence loss layer
-      class KLDivergenceLayer(layers.Layer):
+        # Encoder
+        inputs = tf.keras.Input(shape=(timesteps, features))
+        x = layers.LSTM(lstm_units, return_sequences=True)(inputs)
+        x = layers.LSTM(latent_dim, return_sequences=False)(x)
+        z_mean = layers.Dense(latent_dim)(x)
+        z_log_var = layers.Dense(latent_dim)(x)
+        z = Sampling()([z_mean, z_log_var])
+        
+        # Decoder
+        x = layers.RepeatVector(timesteps)(z)
+        x = layers.LSTM(latent_dim, return_sequences=True)(x)
+        x = layers.LSTM(lstm_units, return_sequences=True)(x)
+        outputs = layers.TimeDistributed(layers.Dense(features))(x)
+        
+        # VAE Model
+        vae = models.Model(inputs, outputs)
+        
+        # Custom KL divergence loss layer
+        class KLDivergenceLayer(layers.Layer):
           def call(self, inputs):
               z_mean, z_log_var = inputs
               kl_loss = -0.5 * tf.reduce_mean(
                   z_log_var - tf.square(z_mean) - tf.exp(z_log_var) + 1)
               self.add_loss(kl_loss)
               return z_mean
-  
-      kl_layer = KLDivergenceLayer()([z_mean, z_log_var])
+        
+        kl_layer = KLDivergenceLayer()([z_mean, z_log_var])
   
       return vae
     
