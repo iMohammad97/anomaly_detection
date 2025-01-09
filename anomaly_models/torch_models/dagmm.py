@@ -8,10 +8,11 @@ from tqdm.notebook import tqdm, trange
 
 ## DAGMM Model (ICLR 18)
 class DAGMM(nn.Module):
-    def __init__(self, feats: int = 1):
+    def __init__(self, feats: int = 1, device: str = 'cpu'):
         super(DAGMM, self).__init__()
         self.name = 'DAGMM'
         self.lr = 0.0001
+        self.device = device
         self.beta = 0.01
         self.n_feats = feats
         self.n_hidden = 16
@@ -33,7 +34,7 @@ class DAGMM(nn.Module):
             nn.Linear(self.n_latent + 2, self.n_hidden), nn.Tanh(), nn.Dropout(0.5),
             nn.Linear(self.n_hidden, self.n_gmm), nn.Softmax(dim=1),
         )
-
+        self.to(device)
         self.optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=1e-5)
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, 5, 0.9)
 
@@ -54,14 +55,15 @@ class DAGMM(nn.Module):
         gamma = self.estimate(z)
         return z_c, x_hat.view(-1), z, gamma.view(-1)
 
-    def train_model(self, data, n_epochs):
+    def learn(self, data, n_epochs):
         """Train the model and return the average loss and learning rate."""
         self.train(True)
-        l = nn.MSELoss(reduction='none')
+        l = nn.MSELoss(reduction='none').to(self.device)
         loss1s, loss2s = [], []
         for _ in (pbar := trange(n_epochs)):
             l1s, l2s = [], []
             for d, _ in tqdm(data, leave=False):
+                d = d.to(self.device)
                 _, x_hat, z, gamma = self.forward(d)
                 l1, l2 = l(x_hat, d), l(gamma, d)
                 l1s.append(torch.mean(l1).item())
@@ -79,10 +81,10 @@ class DAGMM(nn.Module):
     def predict(self, data):
         """Predict using the model and return the loss and predictions."""
         self.eval()
-        l = nn.MSELoss(reduction='none')
+        l = nn.MSELoss(reduction='none').to(self.device)
         ae1s = []
         for d, a in data:
-            _, x_hat, _, _ = self.forward(d)
+            _, x_hat, _, _ = self.forward(d.to(self.device))
             ae1s.append(x_hat)
         ae1s = torch.stack(ae1s)
         y_pred = ae1s[:, data.shape[1] - self.n_feats:data.shape[1]].view(-1, self.n_feats)

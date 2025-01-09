@@ -6,10 +6,11 @@ import numpy as np
 
 # MAD_GAN (ICANN 19)
 class MAD_GAN(nn.Module):
-    def __init__(self, feats: int = 1):
+    def __init__(self, feats: int = 1, device: str = 'cpu'):
         super(MAD_GAN, self).__init__()
         self.name = 'MAD_GAN'
         self.lr = 0.0001
+        self.device = device
         self.n_feats = feats
         self.n_hidden = 16
         self.n_window = 5 # MAD_GAN w_size = 5
@@ -26,6 +27,7 @@ class MAD_GAN(nn.Module):
             nn.Linear(self.n_hidden, self.n_hidden), nn.LeakyReLU(True),
             nn.Linear(self.n_hidden, 1), nn.Sigmoid(),
         )
+        self.to(device)
         self.optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=1e-5)
 
     def forward(self, g):
@@ -36,14 +38,15 @@ class MAD_GAN(nn.Module):
         fake_score = self.discriminator(z)
         return z, real_score, fake_score
 
-    def train_model(self, train_loader, n_epochs: int):
+    def learn(self, train_loader, n_epochs: int):
         self.train()
-        bcel = nn.BCELoss(reduction='mean')
-        msel = nn.MSELoss(reduction='mean')
+        bcel = nn.BCELoss(reduction='mean').to(self.device)
+        msel = nn.MSELoss(reduction='mean').to(self.device)
         losses = []
         for _ in (pbar := trange(n_epochs)):
             mses, gls, dls = [], [], []
-            for d, a in tqdm(train_loader, leave=False):
+            for d, _ in tqdm(train_loader, leave=False):
+                d = d.to(self.device)
                 # training discriminator
                 self.discriminator.zero_grad()
                 _, real, fake = self.forward(d)
@@ -70,6 +73,7 @@ class MAD_GAN(nn.Module):
         l = nn.MSELoss(reduction='none')
         outputs = []
         for d, a in data:
+            d = d.to(self.device)
             z, _, _ = self.forward(d)
             outputs.append(z)
         outputs = torch.stack(outputs)
