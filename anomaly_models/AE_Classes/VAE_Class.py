@@ -75,36 +75,41 @@ class VariationalLSTMAutoencoder:
         self.threshold = np.mean(mse) + self.threshold_sigma * np.std(mse)
 
 
-    def train(self, batch_size=32, epochs=50, optimizer='adam'):
-        self.model = self._build_model()
+   def train(self, batch_size=32, epochs=50, optimizer='adam'):
+    # Ensure the optimizer is set up correctly
+    if isinstance(optimizer, str):
+        optimizer = tf.keras.optimizers.get(optimizer)  # Get optimizer by name
+    elif not isinstance(optimizer, tf.keras.optimizers.Optimizer):
+        raise ValueError("Optimizer must be a string or a tf.keras.optimizers.Optimizer instance.")
 
-        # Custom training step to log MSE and KL losses
-        mse_loss_tracker = tf.keras.metrics.Mean(name="mse_loss")
-        kl_loss_tracker = tf.keras.metrics.Mean(name="kl_loss")
+    kl_loss_tracker.reset_states()
 
-        @tf.function
-        def train_step(x):
+    # Training loop
+    for epoch in range(epochs):
+        print(f"Epoch {epoch + 1}/{epochs}")
+        for step, batch_data in enumerate(self.data_loader(batch_size)):
             with tf.GradientTape() as tape:
-                outputs, kl_loss = self.model(x, training=True)
-                mse_loss = tf.reduce_mean(tf.keras.losses.mse(x, outputs))
-                total_loss = mse_loss + kl_loss
-            grads = tape.gradient(total_loss, self.model.trainable_weights)
-            self.model.optimizer.apply_gradients(zip(grads, self.model.trainable_weights))
+                reconstructed = self.model(batch_data, training=True)
+                loss = self.compute_loss(batch_data, reconstructed)
 
-            mse_loss_tracker.update_state(mse_loss)
+                # Include KL divergence loss if applicable
+                kl_loss = self.compute_kl_loss()
+                loss += kl_loss
+
+            # Compute gradients and update weights
+            gradients = tape.gradient(loss, self.model.trainable_weights)
+            optimizer.apply_gradients(zip(gradients, self.model.trainable_weights))
+
+            # Track losses
             kl_loss_tracker.update_state(kl_loss)
-            return total_loss
+            total_loss_tracker.update_state(loss)
 
-        # Custom training loop
-        for epoch in range(epochs):
-            print(f"Epoch {epoch + 1}/{epochs}")
-            for step, x_batch_train in enumerate(self.train_data_window):
-                loss = train_step(x_batch_train)
-                print(f"Step {step + 1}: total_loss = {loss.numpy()}, mse_loss = {mse_loss_tracker.result().numpy()}, kl_loss = {kl_loss_tracker.result().numpy()}")
+            # Logging
+            if step % 10 == 0:
+                print(f"Step {step}: Loss = {total_loss_tracker.result().numpy()}, KL = {kl_loss_tracker.result().numpy()}")
 
-            # Reset metrics at the end of the epoch
-            mse_loss_tracker.reset_states()
-            kl_loss_tracker.reset_states()
+    print("Training complete.")
+
 
 
     def evaluate(self, batch_size=32):
