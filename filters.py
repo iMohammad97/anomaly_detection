@@ -14,7 +14,7 @@ def rolling_truncated_fft(signal, window_size=100, step_size=1): # Ensure `windo
     for start in range(0,window_size-step_size,step_size):
         fft_results.append(fft_magnitude[start:start + step_size])
     
-    for start in range(0, len(signal) - window_size, step_size):
+    for start in range(0, len(signal) - window_size + 1, step_size):
         window = signal[start:start + window_size]
         fft_magnitude = np.abs(fft(window))  # Compute FFT magnitude
         fft_results.append(fft_magnitude[window_size - step_size:window_size])
@@ -23,13 +23,13 @@ def rolling_truncated_fft(signal, window_size=100, step_size=1): # Ensure `windo
 
 def expanding_mean_centering(sig):
     expanding_mean = np.cumsum(sig) / np.arange(1, len(sig) + 1)
-    return sig - expanding_mean
+    return (sig - expanding_mean).reshape(-1, 1)
 
 def expanding_standardization(sig):
     expanding_mean = np.cumsum(sig) / np.arange(1, len(sig) + 1)
     expanding_var = (np.cumsum((sig - expanding_mean) ** 2) / np.arange(1, len(sig) + 1))
     expanding_std = np.sqrt(expanding_var)
-    return (sig - expanding_mean) / np.maximum(expanding_std, 1e-8)  # Avoid division by zero
+    return ((sig - expanding_mean) / np.maximum(expanding_std, 1e-8)).reshape(-1, 1)  # Avoid division by zero
 
 def expanding_minmax_normalization(signal):
     normalized = []
@@ -37,40 +37,40 @@ def expanding_minmax_normalization(signal):
         min_val = np.min(signal[:t])
         max_val = np.max(signal[:t])
         normalized.append((signal[t-1] - min_val) / (max_val - min_val) if max_val > min_val else 0)
-    return np.array(normalized)
+    return (np.array(normalized)).reshape(-1, 1)
 
 def expanding_rolling_mean(signal):
     rolling_mean = []
     for t in range(1, len(signal) + 1):
         rolling_mean.append(np.mean(signal[:t]))
-    return np.array(rolling_mean)
+    return (np.array(rolling_mean)).reshape(-1, 1)
 
 def log_transform(signal):
-    return np.log1p(np.abs(signal))  # log(1 + |x|) to handle negatives and zeros
+    return (np.log1p(np.abs(signal))).reshape(-1, 1)  # log(1 + |x|) to handle negatives and zeros
 
 def sqrt_transform(signal):
-    return np.sqrt(np.abs(signal))
+    return (np.sqrt(np.abs(signal))).reshape(-1, 1)
 
 def first_order_diff(signal):
-    return np.diff(signal, prepend=signal[0])
+    return (np.diff(signal, prepend=signal[0])).reshape(-1, 1)
 
 def second_order_diff(signal):
-    return np.diff(np.diff(signal, prepend=signal[0]), prepend=signal[0])
+    return (np.diff(np.diff(signal, prepend=signal[0]), prepend=signal[0])).reshape(-1, 1)
 
 def boxcox_transform(signal):
-    return boxcox(signal - np.min(signal) + 1)[0] if (signal > 0).all() else signal
+    return (boxcox(signal - np.min(signal) + 1)[0] if (signal > 0).all() else signal).reshape(-1, 1)
 
 def first_order_div_diff_log_interval(signal, lag=1):
     log_signal = np.log1p(1 + np.abs(signal))
     result = np.zeros_like(signal)
     result[lag:] = log_signal[lag:] - log_signal[:-lag]
-    return result
+    return result.reshape(-1, 1)
 
 def second_order_div_diff_log_interval(signal, lag=1):
     first_order = first_order_div_diff_log_interval(signal, lag)
     result = np.zeros_like(first_order)
     result[lag:] = first_order[lag:] - first_order[:-lag]
-    return result
+    return result.reshape(-1, 1)
 
 def kalman_filter(signal):
     n = len(signal)
@@ -88,7 +88,7 @@ def kalman_filter(signal):
         k = p[t] / (p[t] + r)  # Kalman gain
         x[t] = x[t] + k * (signal[t] - x[t])
         p[t] = (1 - k) * p[t]
-    return x
+    return x.reshape(-1, 1)
 
 def particle_filter(signal, num_particles=100):
     n = len(signal)
@@ -108,4 +108,4 @@ def particle_filter(signal, num_particles=100):
         weights = np.ones(num_particles) / num_particles
         # Estimate
         estimates.append(np.mean(particles))
-    return np.array(estimates)
+    return (np.array(estimates)).reshape(-1, 1)
