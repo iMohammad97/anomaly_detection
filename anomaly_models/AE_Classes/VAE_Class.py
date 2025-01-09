@@ -92,9 +92,9 @@ class VariationalLSTMAutoencoder:
         for epoch in range(epochs):
             print(f"\nEpoch {epoch + 1}/{epochs}")
             
-            mse_loss_tracker.reset_states()
-            kl_loss_tracker.reset_states()
-            
+            mse_loss_tracker.reset_state()
+            kl_loss_tracker.reset_state()
+
             for step in range(0, len(self.train_data_window), batch_size):
                 batch_data = self.train_data_window[step:step + batch_size]
                 
