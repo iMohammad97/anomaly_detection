@@ -20,6 +20,7 @@ class LSTMAutoencoder:
         self.latent_dim = latent_dim
         self.lstm_units = lstm_units
         self.model = None  # Model is not built yet.
+        self.threshold_sigma = threshold_sigma
         self.threshold = 0
         self.predictions_windows = np.zeros(len(self.test_data_window))
         self.anomaly_preds  = np.zeros(len(self.test_data))
@@ -44,11 +45,11 @@ class LSTMAutoencoder:
         return self.model
 
 
-    def compute_threshold(self, threshold_sigma=2.0):
+    def compute_threshold(self):
 
         rec = self.model.predict(self.train_data_window, verbose=0)
         mse = np.mean(np.square(self.train_data_window - rec), axis=(1, 2))
-        self.threshold = np.mean(mse) + threshold_sigma * np.std(mse)
+        self.threshold = np.mean(mse) + self.threshold_sigma * np.std(mse)
 
 
 
