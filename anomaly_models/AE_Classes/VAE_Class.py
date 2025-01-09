@@ -64,8 +64,8 @@ class VariationalLSTMAutoencoder:
         outputs = layers.TimeDistributed(layers.Dense(self.features))(x)
     
         # VAE Model
-        vae = models.Model(inputs, [outputs, kl_loss])  # Return both outputs and KL loss
-        return vae
+        self.model = models.Model(inputs, [outputs, kl_loss])  # Return both outputs and KL loss
+        return self.model
 
     
     def compute_threshold(self):
