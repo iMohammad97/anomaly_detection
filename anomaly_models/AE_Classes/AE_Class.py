@@ -1,18 +1,19 @@
-from tensorflow.keras import layers, models
+from tensorflow.keras import layers, models, callbacks
 from anomaly_models.AE import create_windows
 import os
-import glob
+from matplotlib import pyplot as plt
 import numpy as np
 import tensorflow as tf
 import plotly.graph_objects as go
-
+import pickle
+import json
 
 
 class LSTMAutoencoder:
-    def __init__(self, train_data, test_data, labels,timesteps: int = 128, features: int = 1, latent_dim: int = 32, lstm_units: int = 64, step_size: int = 1, threshold_sigma=2.0):
-
+    def __init__(self, train_data, test_data, labels, timesteps: int = 128, features: int = 1, latent_dim: int = 32,
+                 lstm_units: int = 64, step_size: int = 1, threshold_sigma=2.0):
         self.train_data = train_data
-        self.test_data = test_data 
+        self.test_data = test_data
         self.train_data_window = create_windows(self.train_data, timesteps, step_size)
         self.test_data_window = create_windows(self.test_data, timesteps, 1)
         self.timesteps = timesteps
@@ -23,13 +24,13 @@ class LSTMAutoencoder:
         self.threshold_sigma = threshold_sigma
         self.threshold = 0
         self.predictions_windows = np.zeros(len(self.test_data_window))
-        self.anomaly_preds  = np.zeros(len(self.test_data))
+        self.anomaly_preds = np.zeros(len(self.test_data))
         self.anomaly_errors = np.zeros(len(self.test_data))
         self.predictions = np.zeros(len(self.test_data))
-        self.labels=labels
-        
-    def _build_model(self):
+        self.labels = labels
+        self.name = 'LSTMAutoencoder'  # Add a name attribute to the class
 
+    def _build_model(self):
         inputs = tf.keras.Input(shape=(self.timesteps, self.features), name='input_layer')
         x = layers.LSTM(self.lstm_units, return_sequences=True, name='lstm_1')(inputs)
         x = layers.LSTM(self.latent_dim, return_sequences=False, name='latent')(x)
@@ -44,32 +45,35 @@ class LSTMAutoencoder:
 
         return self.model
 
-
     def compute_threshold(self):
-
         rec = self.model.predict(self.train_data_window, verbose=0)
         mse = np.mean(np.square(self.train_data_window - rec), axis=(1, 2))
         self.threshold = np.mean(mse) + self.threshold_sigma * np.std(mse)
 
-
-
-    def train(self, batch_size=32, epochs=50,  optimizer='adam', loss='mse'):
+    def train(self, batch_size=32, epochs=50, optimizer='adam', loss='mse', patience=10):
         # Ensure the model is built before training
         self.model = self._build_model()
 
         # Compile the model with the specified optimizer and loss function
         self.model.compile(optimizer=optimizer, loss=loss)
 
+        # Early stopping callback
+        early_stopping = callbacks.EarlyStopping(monitor='val_loss', patience=patience, restore_best_weights=True)
+
         # Train the model
-        self.model.fit(
+        history = self.model.fit(
             self.train_data_window, self.train_data_window,  # Use self.train_data for both input and output
             batch_size=batch_size,
             validation_split=0.1,  # Split 10% of the training data for validation
             epochs=epochs,
-            verbose=1
+            verbose=1,
+            callbacks=[early_stopping]
         )
 
-
+        # Save the loss values in a pickle file
+        with open(f'losses_{self.name}.pkl', 'wb') as f:
+            pickle.dump({'loss': history.history['loss'], 'val_loss': history.history['val_loss']}, f)
+        print(f"Loss values saved to losses_{self.name}.pkl")
 
     def evaluate(self, batch_size=32):
         length = self.test_data.shape[0]
@@ -77,47 +81,91 @@ class LSTMAutoencoder:
         # Generate predictions for the test data windows
         self.predictions_windows = self.model.predict(self.test_data_window, batch_size=batch_size)
         mse = np.mean(np.square(self.test_data_window - self.predictions_windows), axis=(1, 2))
-            # Expand errors to original length
+        # Expand errors to original length
         M = mse.shape[0]
         timestep_errors = np.zeros(length)
         counts = np.zeros(length)
-    
+
         # Each window i covers timesteps [i, i+window_size-1]
         for i in range(M):
             start = i
             end = i + self.timesteps - 1
             timestep_errors[start:end + 1] += mse[i]
             counts[start:end + 1] += 1
-    
+
         counts[counts == 0] = 1  # Avoid division by zero
         timestep_errors /= counts  # Average overlapping windows
-    
-        # Generate anomaly predictions based on the threshold
-        self.anomaly_preds   = (timestep_errors > self.threshold).astype(int)
-        self.anomaly_errors = timestep_errors
 
+        # Generate anomaly predictions based on the threshold
+        self.anomaly_preds = (timestep_errors > self.threshold).astype(int)
+        self.anomaly_errors = timestep_errors
 
         counts = np.zeros(length)
         for i in range(M):
             for j in range(self.timesteps):
                 timestep_index = i + j  # This is the index in the timestep corresponding to the current prediction
                 if timestep_index < length:  # Ensure we don't go out of bounds
-                    self.predictions[timestep_index] += self.predictions_windows[i, j]  # Accumulate each prediction appropriately
+                    self.predictions[timestep_index] += self.predictions_windows[
+                        i, j]  # Accumulate each prediction appropriately
                     counts[timestep_index] += 1
-    
+
         # Divide by counts to get the average prediction
         for i in range(length):
             if counts[i] > 0:
                 self.predictions[i] /= counts[i]
 
-    # You can additionally handle any NaN values here if necessary
-        self.predictions = np.nan_to_num(self.predictions) 
+        self.predictions = np.nan_to_num(self.predictions)  # Handle any NaN values if necessary
 
     def get_latent(self, x):
         encoder_model = models.Model(inputs=self.model.input, outputs=self.model.get_layer('latent').output)
         latent_representations = encoder_model.predict(x)
         return latent_representations
 
+    def save_state(self, file_path: str, model_path: str = "model.h5"):
+        """Save the state of the object and the Keras model."""
+        # Save the Keras model
+        if self.model is not None:
+            self.model.save(model_path)
+            print(f"Model saved to {model_path}")
+        else:
+            print("No model to save.")
+
+        # Save the rest of the attributes
+        state = {
+            'train_data': self.train_data.tolist(),
+            'test_data': self.test_data.tolist(),
+            'labels': self.labels.tolist(),
+            'timesteps': self.timesteps,
+            'features': self.features,
+            'latent_dim': self.latent_dim,
+            'lstm_units': self.lstm_units,
+            'threshold': self.threshold,
+            'predictions_windows': self.predictions_windows.tolist(),
+            'anomaly_preds': self.anomaly_preds.tolist(),
+            'anomaly_errors': self.anomaly_errors.tolist(),
+            'predictions': self.predictions.tolist(),
+            'model_path': model_path  # Save the model path for loading later
+        }
+        with open(file_path, 'w') as file:
+            json.dump(state, file)
+        print(f"State saved to {file_path}")
+
+    def load_state(self, file_path: str):
+        """Load the state of the object and the Keras model."""
+        with open(file_path, 'r') as file:
+            state = json.load(file)
+
+        # Restore the attributes
+        self.train_data = np.array(state['train_data'])
+        self.test_data = np.array(state['test_data'])
+        self.labels = np.array(state['labels'])
+        self.timesteps = state['timesteps']
+        self.features = state['features']
+        self.latent_dim = state['latent_dim']
+        self.lstm_units = state['lstm_units']
+        self.threshold = state['threshold']
+        self.predictions_windows = np.array(state['predictions_windows'])
+        self.anomaly_preds
 
     def plot_results(self,size=800):
         # Flattening arrays to ensure they are 1D
@@ -184,60 +232,19 @@ class LSTMAutoencoder:
         
         # Show the figure
         fig.show()
-    def save_state(self, file_path: str, model_path: str = "model.h5"):
-        """Save the state of the object and the Keras model."""
-        # Save the Keras model
-        if self.model is not None:
-            self.model.save(model_path)
-            print(f"Model saved to {model_path}")
-        else:
-            print("No model to save.")
-        
-        # Save the rest of the attributes
-        state = {
-            'train_data': self.train_data.tolist(),
-            'test_data': self.test_data.tolist(),
-            'labels': self.labels.tolist(),
-            'timesteps': self.timesteps,
-            'features': self.features,
-            'latent_dim': self.latent_dim,
-            'lstm_units': self.lstm_units,
-            'threshold': self.threshold,
-            'predictions_windows': self.predictions_windows.tolist(),
-            'anomaly_preds': self.anomaly_preds.tolist(),
-            'anomaly_errors': self.anomaly_errors.tolist(),
-            'predictions': self.predictions.tolist(),
-            'model_path': model_path  # Save the model path for loading later
-        }
-        with open(file_path, 'w') as file:
-            json.dump(state, file)
-        print(f"State saved to {file_path}")
 
-    def load_state(self, file_path: str):
-        """Load the state of the object and the Keras model."""
-        with open(file_path, 'r') as file:
-            state = json.load(file)
-        
-        # Restore the attributes
-        self.train_data = np.array(state['train_data'])
-        self.test_data = np.array(state['test_data'])
-        self.labels = np.array(state['labels'])
-        self.timesteps = state['timesteps']
-        self.features = state['features']
-        self.latent_dim = state['latent_dim']
-        self.lstm_units = state['lstm_units']
-        self.threshold = state['threshold']
-        self.predictions_windows = np.array(state['predictions_windows'])
-        self.anomaly_preds = np.array(state['anomaly_preds'])
-        self.anomaly_errors = np.array(state['anomaly_errors'])
-        self.predictions = np.array(state['predictions'])
-        
-        # Load the Keras model if a path is provided
-        model_path = state.get('model_path', None)
-        if model_path and os.path.exists(model_path):
-            self.model = tf.keras.models.load_model(model_path)
-            print(f"Model loaded from {model_path}")
-        else:
-            print("No model found to load.")
+    def plot_losses(self):
+        # Load the loss values from the pickle file
+        with open(f'losses_{self.name}.pkl', 'rb') as f:
+            loss_values = pickle.load(f)
 
-
+        # Plot the loss values
+        plt.figure(figsize=(10, 6))
+        plt.plot(loss_values['loss'], label='Training Loss')
+        plt.plot(loss_values['val_loss'], label='Validation Loss')
+        plt.xlabel('Epochs')
+        plt.ylabel('Loss')
+        plt.title('Training Loss Over Epochs')
+        plt.legend()
+        plt.grid(True)
+        plt.show()

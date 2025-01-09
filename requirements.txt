@@ -10,3 +10,5 @@ statsmodels~=0.14.1
 tqdm~=4.66.1
 torchvision~=0.16.0
 dgl~=2.2.0
+plotly~=5.24.1
+torch-geometric~=2.6.1
