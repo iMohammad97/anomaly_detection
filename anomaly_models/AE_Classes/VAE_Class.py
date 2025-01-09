@@ -26,8 +26,9 @@ class VariationalLSTMAutoencoder:
         self.anomaly_errors = np.zeros(len(self.test_data))
         self.predictions = np.zeros(len(self.test_data))
         self.labels=labels
-        
-    def _build_model(timesteps, features, latent_dim=32, lstm_units=64):
+
+    
+    def _build_model(self):
         class Sampling(layers.Layer):
             """Uses (z_mean, z_log_var) to sample z, the vector encoding a digit."""
             def call(self, inputs):
@@ -36,15 +37,15 @@ class VariationalLSTMAutoencoder:
                 dim = tf.shape(z_mean)[1]
                 epsilon = tf.keras.backend.random_normal(shape=(batch, dim))
                 return z_mean + tf.exp(0.5 * z_log_var) * epsilon
-
+    
         # Encoder
-        inputs = tf.keras.Input(shape=(timesteps, features))
-        x = layers.LSTM(lstm_units, return_sequences=True)(inputs)
-        x = layers.LSTM(latent_dim, return_sequences=False)(x)
-        z_mean = layers.Dense(latent_dim)(x)
-        z_log_var = layers.Dense(latent_dim)(x)
+        inputs = tf.keras.Input(shape=(self.timesteps, self.features))
+        x = layers.LSTM(self.lstm_units, return_sequences=True)(inputs)
+        x = layers.LSTM(self.latent_dim, return_sequences=False)(x)
+        z_mean = layers.Dense(self.latent_dim)(x)
+        z_log_var = layers.Dense(self.latent_dim)(x)
         z = Sampling()([z_mean, z_log_var])
-
+    
         # KL Divergence
         class KLDivergenceLayer(layers.Layer):
             def call(self, inputs):
@@ -53,19 +54,20 @@ class VariationalLSTMAutoencoder:
                     z_log_var - tf.square(z_mean) - tf.exp(z_log_var) + 1, axis=-1)
                 self.add_loss(tf.reduce_mean(kl_loss))  # Add KL divergence to total loss
                 return kl_loss
-
+    
         kl_loss = KLDivergenceLayer()([z_mean, z_log_var])
-
+    
         # Decoder
-        x = layers.RepeatVector(timesteps)(z)
-        x = layers.LSTM(latent_dim, return_sequences=True)(x)
-        x = layers.LSTM(lstm_units, return_sequences=True)(x)
-        outputs = layers.TimeDistributed(layers.Dense(features))(x)
-
+        x = layers.RepeatVector(self.timesteps)(z)
+        x = layers.LSTM(self.latent_dim, return_sequences=True)(x)
+        x = layers.LSTM(self.lstm_units, return_sequences=True)(x)
+        outputs = layers.TimeDistributed(layers.Dense(self.features))(x)
+    
         # VAE Model
         vae = models.Model(inputs, [outputs, kl_loss])  # Return both outputs and KL loss
         return vae
 
+    
     def compute_threshold(self):
 
         rec = self.model.predict(self.train_data_window, verbose=0)
