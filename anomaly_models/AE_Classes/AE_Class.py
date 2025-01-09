@@ -118,7 +118,7 @@ class LSTMAutoencoder:
         return latent_representations
 
 
-    def plot_results(self):
+    def plot_results(self,size=800):
         # Flattening arrays to ensure they are 1D
         test_data = self.test_data.ravel()  # Convert to 1D array
         anomaly_preds = self.anomaly_preds  # Already 1D
@@ -131,7 +131,7 @@ class LSTMAutoencoder:
             raise ValueError("All input arrays must have the same length.")
     
         # Determine plot width based on length of test_data
-        plot_width = max(800, len(test_data) * 2)  # Ensure a minimum width of 800, scale with data length
+        plot_width = max(size, len(test_data) * 2)  # Ensure a minimum width of 800, scale with data length
     
         # Create a figure
         fig = go.Figure()
