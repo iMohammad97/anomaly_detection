@@ -21,7 +21,7 @@ class LSTMAutoencoder:
         self.lstm_units = lstm_units
         self.model = None  # Model is not built yet.
         self.threshold = 0
-        self.predictions_windows = np.zeros(len(self.test_data))
+        self.predictions_windows = np.zeros(len(self.test_data_window))
         self.anomaly_preds  = np.zeros(len(self.test_data))
         self.anomaly_errors = np.zeros(len(self.test_data))
         self.predictions = np.zeros(len(self.test_data))
