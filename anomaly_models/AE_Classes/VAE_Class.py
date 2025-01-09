@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 
 
 
-class LSTMAutoencoder:
+class VariationalLSTMAutoencoder:
     def __init__(self, train_data, test_data, labels,timesteps: int = 128, features: int = 1, latent_dim: int = 32, lstm_units: int = 64, step_size: int = 1, threshold_sigma=2.0):
 
         self.train_data = train_data
@@ -71,29 +71,29 @@ class LSTMAutoencoder:
     
     
   
-      def compute_threshold(self):
+  def compute_threshold(self):
+
+      rec = self.model.predict(self.train_data_window, verbose=0)
+      mse = np.mean(np.square(self.train_data_window - rec), axis=(1, 2))
+      self.threshold = np.mean(mse) + self.threshold_sigma * np.std(mse)
+
   
-          rec = self.model.predict(self.train_data_window, verbose=0)
-          mse = np.mean(np.square(self.train_data_window - rec), axis=(1, 2))
-          self.threshold = np.mean(mse) + self.threshold_sigma * np.std(mse)
   
-  
-  
-      def train(self, batch_size=32, epochs=50,  optimizer='adam', loss='mse'):
-          # Ensure the model is built before training
-          self.model = self._build_model()
-  
-          # Compile the model with the specified optimizer and loss function
-          self.model.compile(optimizer=optimizer, loss=loss)
-  
-          # Train the model
-          self.model.fit(
-              self.train_data_window, self.train_data_window,  # Use self.train_data for both input and output
-              batch_size=batch_size,
-              validation_split=0.1,  # Split 10% of the training data for validation
-              epochs=epochs,
-              verbose=1
-          )
+  def train(self, batch_size=32, epochs=50,  optimizer='adam', loss='mse'):
+      # Ensure the model is built before training
+      self.model = self._build_model()
+
+      # Compile the model with the specified optimizer and loss function
+      self.model.compile(optimizer=optimizer, loss=loss)
+
+      # Train the model
+      self.model.fit(
+          self.train_data_window, self.train_data_window,  # Use self.train_data for both input and output
+          batch_size=batch_size,
+          validation_split=0.1,  # Split 10% of the training data for validation
+          epochs=epochs,
+          verbose=1
+      )
 
 
 
