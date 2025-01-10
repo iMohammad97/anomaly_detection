@@ -8,8 +8,7 @@ import plotly.graph_objects as go
 
 
 class StationaryLSTMAutoencoder:
-    def __init__(self, train_data, test_data, labels,timesteps: int = 128, features: int = 1, latent_dim: int = 32, lstm_units: int = 64, step_size: int = 1, threshold_sigma=2.0):
-
+    def __init__(self, train_data, test_data, labels, timesteps: int = 128, features: int = 1, latent_dim: int = 32, lstm_units: int = 64, step_size: int = 1, threshold_sigma=2.0):
         self.train_data = train_data
         self.test_data = test_data 
         self.train_data_window = create_windows(self.train_data, timesteps, step_size)
@@ -22,12 +21,11 @@ class StationaryLSTMAutoencoder:
         self.threshold_sigma = threshold_sigma
         self.threshold = 0
         self.predictions_windows = np.zeros(len(self.test_data_window))
-        self.anomaly_preds  = np.zeros(len(self.test_data))
+        self.anomaly_preds = np.zeros(len(self.test_data))
         self.anomaly_errors = np.zeros(len(self.test_data))
         self.predictions = np.zeros(len(self.test_data))
-        self.labels=labels
+        self.labels = labels
 
-    
     def _build_model(self):
         # Encoder
         inputs = tf.keras.Input(shape=(self.timesteps, self.features))
@@ -67,7 +65,6 @@ class StationaryLSTMAutoencoder:
     
         # Training loop
         for epoch in (pbar := trange(epochs)):
-    
             mse_loss_tracker.reset_state()
             mean_loss_tracker.reset_state()
             std_loss_tracker.reset_state()
@@ -108,7 +105,6 @@ class StationaryLSTMAutoencoder:
         print(f"Loss values saved to losses_{self.name}.pkl")
 
     def compute_threshold(self):
-
         rec = self.model.predict(self.train_data_window, verbose=0)
         mse = np.mean(np.square(self.train_data_window - rec), axis=(1, 2))
         self.threshold = np.mean(mse) + self.threshold_sigma * np.std(mse)
@@ -119,7 +115,8 @@ class StationaryLSTMAutoencoder:
         # Generate predictions for the test data windows
         self.predictions_windows = self.model.predict(self.test_data_window, batch_size=batch_size)
         mse = np.mean(np.square(self.test_data_window - self.predictions_windows), axis=(1, 2))
-            # Expand errors to original length
+        
+        # Expand errors to original length
         M = mse.shape[0]
         timestep_errors = np.zeros(length)
         counts = np.zeros(length)
@@ -135,9 +132,8 @@ class StationaryLSTMAutoencoder:
         timestep_errors /= counts  # Average overlapping windows
     
         # Generate anomaly predictions based on the threshold
-        self.anomaly_preds   = (timestep_errors > self.threshold).astype(int)
+        self.anomaly_preds = (timestep_errors > self.threshold).astype(int)
         self.anomaly_errors = timestep_errors
-
 
         counts = np.zeros(length)
         for i in range(M):
@@ -151,8 +147,6 @@ class StationaryLSTMAutoencoder:
         for i in range(length):
             if counts[i] > 0:
                 self.predictions[i] /= counts[i]
-
-    # You can additionally handle any NaN values here if necessary
         self.predictions = np.nan_to_num(self.predictions) 
 
     def get_latent(self, x):
@@ -160,8 +154,7 @@ class StationaryLSTMAutoencoder:
         latent_representations = encoder_model.predict(x)
         return latent_representations
 
-
-    def plot_results(self,size=800):
+    def plot_results(self, size=800):
         # Flattening arrays to ensure they are 1D
         test_data = self.test_data.ravel()  # Convert to 1D array
         anomaly_preds = self.anomaly_preds  # Already 1D
@@ -226,6 +219,7 @@ class StationaryLSTMAutoencoder:
         
         # Show the figure
         fig.show()
+
     def save_state(self, file_path: str, model_path: str = "model.h5"):
         """Save the state of the object and the Keras model."""
         # Save the Keras model
@@ -281,4 +275,3 @@ class StationaryLSTMAutoencoder:
             print(f"Model loaded from {model_path}")
         else:
             print("No model found to load.")
-
