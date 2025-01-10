@@ -7,6 +7,25 @@ import tensorflow as tf
 import plotly.graph_objects as go
 
 
+class StationaryLoss(layers.Layer):
+    def call(self, latent, mean_coef: float = 1.0, std_coef: float = 1.0):
+        # Calculate the average of the latent space
+        latent_avg = tf.reduce_mean(latent, axis=0)
+        mse_loss = tf.reduce_mean(tf.abs(latent_avg))
+        self.add_loss(mean_coef * mse_loss)
+        
+        # Calculate the standard deviation of the latent space
+        latent_std = tf.math.reduce_std(latent, axis=0)
+        std_loss = tf.reduce_mean(tf.abs(latent_std - 1.0))
+        self.add_loss(std_coef * std_loss)
+        
+        # Store the losses separately for logging
+        self.mse_loss = mean_coef * mse_loss
+        self.std_loss = std_coef * std_loss
+        
+        return latent
+
+
 class StationaryLSTMAutoencoder:
     def __init__(self, train_data, test_data, labels, timesteps: int = 128, features: int = 1, latent_dim: int = 32, lstm_units: int = 64, step_size: int = 1, threshold_sigma=2.0):
         self.train_data = train_data
