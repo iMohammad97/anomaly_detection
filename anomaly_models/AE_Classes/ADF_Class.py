@@ -48,7 +48,7 @@ class AugmentedDickeyFullerLSTMAutoencoder:
         self.predictions = np.zeros(len(self.test_data))
         self.labels = labels
         self.name = 'LSTM_VAE'
-        self.losses = {'mse': [], 'kld': []}
+        self.losses = {'mse': [], 'adf': []}
 
     
     def _build_model(self):
