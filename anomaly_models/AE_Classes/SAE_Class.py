@@ -29,88 +29,89 @@ class StationaryLSTMAutoencoder:
 
     
     def _build_model(self):
-        class Sampling(layers.Layer):
-            """Uses (z_mean, z_log_var) to sample z, the vector encoding a digit."""
-            def call(self, inputs):
-                z_mean, z_log_var = inputs
-                batch = tf.shape(z_mean)[0]
-                dim = tf.shape(z_mean)[1]
-                epsilon = tf.keras.backend.random_normal(shape=(batch, dim))
-                return z_mean + tf.exp(0.5 * z_log_var) * epsilon
-    
         # Encoder
         inputs = tf.keras.Input(shape=(self.timesteps, self.features))
         x = layers.LSTM(self.lstm_units, return_sequences=True)(inputs)
         x = layers.LSTM(self.latent_dim, return_sequences=False)(x)
-        z_mean = layers.Dense(self.latent_dim)(x)
-        z_log_var = layers.Dense(self.latent_dim)(x)
-        z = Sampling()([z_mean, z_log_var])
+        latent = layers.Dense(self.latent_dim)(x)
     
-        # KL Divergence
-        class KLDivergenceLayer(layers.Layer):
-            def call(self, inputs):
-                z_mean, z_log_var = inputs
-                kl_loss = -0.5 * tf.reduce_sum(
-                    z_log_var - tf.square(z_mean) - tf.exp(z_log_var) + 1, axis=-1)
-                self.add_loss(tf.reduce_mean(kl_loss))  # Add KL divergence to total loss
-                return kl_loss
-    
-        kl_loss = KLDivergenceLayer()([z_mean, z_log_var])
+        # Apply custom loss to the latent space
+        latent_with_loss = StationaryLoss()(latent, mean_coef=1.0, std_coef=1.0)
     
         # Decoder
-        x = layers.RepeatVector(self.timesteps)(z)
+        x = layers.RepeatVector(self.timesteps)(latent_with_loss)
         x = layers.LSTM(self.latent_dim, return_sequences=True)(x)
         x = layers.LSTM(self.lstm_units, return_sequences=True)(x)
         outputs = layers.TimeDistributed(layers.Dense(self.features))(x)
     
-        # VAE Model
-        vae = models.Model(inputs, [outputs, kl_loss])  # Return both outputs and KL loss
-        return vae
-
+        # DAE Model
+        self.model = models.Model(inputs, outputs)  # Return only the outputs (no KL divergence in this case)
+        return self.model
     
+    def train(self, batch_size=32, epochs=50, optimizer='adam'):
+        # Ensure the optimizer is set up correctly
+        if isinstance(optimizer, str):
+            optimizer = tf.keras.optimizers.get(optimizer)  # Get optimizer by name
+        elif not isinstance(optimizer, tf.keras.optimizers.Optimizer):
+            raise ValueError("Optimizer must be a string or a tf.keras.optimizers.Optimizer instance.")
+    
+        self._build_model()  # Build the model
+    
+        # Loss function
+        mse_loss_fn = tf.keras.losses.MeanSquaredError()
+    
+        # Track losses
+        mse_loss_tracker = tf.keras.metrics.Mean(name="mse_loss")
+        mean_loss_tracker = tf.keras.metrics.Mean(name="mean_loss")
+        std_loss_tracker = tf.keras.metrics.Mean(name="std_loss")
+    
+        # Training loop
+        for epoch in (pbar := trange(epochs)):
+    
+            mse_loss_tracker.reset_state()
+            mean_loss_tracker.reset_state()
+            std_loss_tracker.reset_state()
+    
+            for step in range(0, len(self.train_data_window), batch_size):
+                batch_data = self.train_data_window[step:step + batch_size]
+    
+                with tf.GradientTape() as tape:
+                    # Forward pass
+                    reconstructed = self.model(batch_data, training=True)
+    
+                    # Compute reconstruction loss
+                    mse_loss = mse_loss_fn(batch_data, reconstructed)
+    
+                    # Get custom losses from the model
+                    mean_loss = tf.reduce_mean([layer.mse_loss for layer in self.model.layers if isinstance(layer, StationaryLoss)])
+                    std_loss = tf.reduce_mean([layer.std_loss for layer in self.model.layers if isinstance(layer, StationaryLoss)])
+    
+                    # Total loss
+                    total_loss = mse_loss + mean_loss + std_loss
+    
+                # Compute gradients and update weights
+                gradients = tape.gradient(total_loss, self.model.trainable_weights)
+                optimizer.apply_gradients(zip(gradients, self.model.trainable_weights))
+    
+                # Track losses
+                mse_loss_tracker.update_state(mse_loss)
+                mean_loss_tracker.update_state(mean_loss)
+                std_loss_tracker.update_state(std_loss)
+    
+            # Log losses after each epoch
+            self.losses['mse'].append(float(mse_loss_tracker.result().numpy()))
+            self.losses['mean'].append(float(mean_loss_tracker.result().numpy()))
+            self.losses['std'].append(float(std_loss_tracker.result().numpy()))
+            pbar.set_description(
+                f"MSE Loss = {self.losses['mse'][-1]:.4f}, Mean Loss = {self.losses['mean'][-1]:.4f}, Std Loss = {self.losses['std'][-1]:.4f}")
+    
+        print(f"Loss values saved to losses_{self.name}.pkl")
+
     def compute_threshold(self):
 
         rec = self.model.predict(self.train_data_window, verbose=0)
         mse = np.mean(np.square(self.train_data_window - rec), axis=(1, 2))
         self.threshold = np.mean(mse) + self.threshold_sigma * np.std(mse)
-
-
-   def train(self, batch_size=32, epochs=50, optimizer='adam'):
-    # Ensure the optimizer is set up correctly
-    if isinstance(optimizer, str):
-        optimizer = tf.keras.optimizers.get(optimizer)  # Get optimizer by name
-    elif not isinstance(optimizer, tf.keras.optimizers.Optimizer):
-        raise ValueError("Optimizer must be a string or a tf.keras.optimizers.Optimizer instance.")
-
-    kl_loss_tracker.reset_states()
-
-    # Training loop
-    for epoch in range(epochs):
-        print(f"Epoch {epoch + 1}/{epochs}")
-        for step, batch_data in enumerate(self.data_loader(batch_size)):
-            with tf.GradientTape() as tape:
-                reconstructed = self.model(batch_data, training=True)
-                loss = self.compute_loss(batch_data, reconstructed)
-
-                # Include KL divergence loss if applicable
-                kl_loss = self.compute_kl_loss()
-                loss += kl_loss
-
-            # Compute gradients and update weights
-            gradients = tape.gradient(loss, self.model.trainable_weights)
-            optimizer.apply_gradients(zip(gradients, self.model.trainable_weights))
-
-            # Track losses
-            kl_loss_tracker.update_state(kl_loss)
-            total_loss_tracker.update_state(loss)
-
-            # Logging
-            if step % 10 == 0:
-                print(f"Step {step}: Loss = {total_loss_tracker.result().numpy()}, KL = {kl_loss_tracker.result().numpy()}")
-
-    print("Training complete.")
-
-
 
     def evaluate(self, batch_size=32):
         length = self.test_data.shape[0]
