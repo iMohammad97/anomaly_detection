@@ -8,6 +8,24 @@ from tqdm.notebook import trange
 import plotly.graph_objects as go
 from matplotlib import pyplot as plt
 
+class ADFTestLoss(layers.Layer):
+    def call(self, latent, adf_coef: float = 1.0):
+        adf_loss = 0
+        for i in range(latent.shape[-1]):
+            ts = tf.reshape(latent[:, i], [-1])
+            # Calculate differences using TensorFlow operations
+            ts_diff = ts[1:] - ts[:-1]
+            ts_var = tf.math.reduce_variance(ts_diff)
+            adf_loss += ts_var
+        adf_loss = adf_loss / latent.shape[-1]
+        self.add_loss(adf_coef * adf_loss)
+        return latent
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
+
+    def compute_output_signature(self, input_signature):
+        return input_signature
 
 class AugmentedDickeyFullerLSTMAutoencoder:
     def __init__(self, train_data, test_data, labels, timesteps: int = 128, features: int = 1, latent_dim: int = 32,
