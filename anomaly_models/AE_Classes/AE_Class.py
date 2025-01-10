@@ -5,7 +5,6 @@ from matplotlib import pyplot as plt
 import numpy as np
 import tensorflow as tf
 import plotly.graph_objects as go
-import pickle
 import json
 
 
@@ -29,6 +28,7 @@ class LSTMAutoencoder:
         self.predictions = np.zeros(len(self.test_data))
         self.labels = labels
         self.name = 'LSTMAutoencoder'  # Add a name attribute to the class
+        self.losses = {'train': [], 'valid': []}
 
     def _build_model(self):
         inputs = tf.keras.Input(shape=(self.timesteps, self.features), name='input_layer')
@@ -70,10 +70,9 @@ class LSTMAutoencoder:
             callbacks=[early_stopping]
         )
 
-        # Save the loss values in a pickle file
-        with open(f'losses_{self.name}.pkl', 'wb') as f:
-            pickle.dump({'loss': history.history['loss'], 'val_loss': history.history['val_loss']}, f)
-        print(f"Loss values saved to losses_{self.name}.pkl")
+        self.losses['train'] = [float(loss) for loss in history.history['loss']]
+        self.losses['valid'] = [float(loss) for loss in history.history['val_loss']]
+
 
     def evaluate(self, batch_size=32):
         length = self.test_data.shape[0]
@@ -144,6 +143,7 @@ class LSTMAutoencoder:
             'anomaly_preds': self.anomaly_preds.tolist(),
             'anomaly_errors': self.anomaly_errors.tolist(),
             'predictions': self.predictions.tolist(),
+            'losses': self.losses,
             'model_path': model_path  # Save the model path for loading later
         }
         with open(file_path, 'w') as file:
@@ -165,7 +165,7 @@ class LSTMAutoencoder:
         self.lstm_units = state['lstm_units']
         self.threshold = state['threshold']
         self.predictions_windows = np.array(state['predictions_windows'])
-        self.anomaly_preds
+        self.losses = state['losses']
 
     def plot_results(self,size=800):
         # Flattening arrays to ensure they are 1D
@@ -174,54 +174,54 @@ class LSTMAutoencoder:
         anomaly_errors = self.anomaly_errors  # Already 1D
         predictions = self.predictions  # Already 1D
         labels = self.labels.ravel()  # Convert to 1D array
-    
+
         # Check if all inputs have the same length
         if not (len(test_data) == len(labels) == len(anomaly_preds) == len(anomaly_errors) == len(predictions)):
             raise ValueError("All input arrays must have the same length.")
-    
+
         # Determine plot width based on length of test_data
         plot_width = max(size, len(test_data) * 2)  # Ensure a minimum width of 800, scale with data length
-    
+
         # Create a figure
         fig = go.Figure()
-        
+
         # Add traces for test data, predictions, and anomaly errors
-        fig.add_trace(go.Scatter(x=list(range(len(test_data))), 
-                                 y=test_data, 
-                                 mode='lines', 
-                                 name='Test Data', 
+        fig.add_trace(go.Scatter(x=list(range(len(test_data))),
+                                 y=test_data,
+                                 mode='lines',
+                                 name='Test Data',
                                  line=dict(color='blue')))
-    
-        fig.add_trace(go.Scatter(x=list(range(len(predictions))), 
-                                 y=predictions, 
-                                 mode='lines', 
-                                 name='Predictions', 
+
+        fig.add_trace(go.Scatter(x=list(range(len(predictions))),
+                                 y=predictions,
+                                 mode='lines',
+                                 name='Predictions',
                                  line=dict(color='purple')))
-    
-        fig.add_trace(go.Scatter(x=list(range(len(anomaly_errors))), 
-                                 y=anomaly_errors, 
-                                 mode='lines', 
-                                 name='Anomaly Errors', 
+
+        fig.add_trace(go.Scatter(x=list(range(len(anomaly_errors))),
+                                 y=anomaly_errors,
+                                 mode='lines',
+                                 name='Anomaly Errors',
                                  line=dict(color='red')))
-    
+
         # Highlight points in test_data where label is 1
         label_indices = [i for i in range(len(labels)) if labels[i] == 1]
         if label_indices:
-            fig.add_trace(go.Scatter(x=label_indices, 
-                                     y=[test_data[i] for i in label_indices], 
-                                     mode='markers', 
-                                     name='Labels on Test Data', 
+            fig.add_trace(go.Scatter(x=label_indices,
+                                     y=[test_data[i] for i in label_indices],
+                                     mode='markers',
+                                     name='Labels on Test Data',
                                      marker=dict(color='orange', size=10)))
-    
+
         # Highlight points in predictions where anomaly_preds is 1
         anomaly_pred_indices = [i for i in range(len(anomaly_preds)) if anomaly_preds[i] == 1]
         if anomaly_pred_indices:
-            fig.add_trace(go.Scatter(x=anomaly_pred_indices, 
-                                     y=[predictions[i] for i in anomaly_pred_indices], 
-                                     mode='markers', 
-                                     name='Anomaly Predictions', 
+            fig.add_trace(go.Scatter(x=anomaly_pred_indices,
+                                     y=[predictions[i] for i in anomaly_pred_indices],
+                                     mode='markers',
+                                     name='Anomaly Predictions',
                                      marker=dict(color='green', size=10)))
-    
+
         # Set the layout
         fig.update_layout(title='Test Data, Predictions, and Anomalies',
                           xaxis_title='Time Steps',
@@ -229,19 +229,15 @@ class LSTMAutoencoder:
                           legend=dict(x=0, y=1, traceorder='normal', orientation='h'),
                           template='plotly',
                           width=plot_width)
-        
+
         # Show the figure
         fig.show()
 
     def plot_losses(self):
-        # Load the loss values from the pickle file
-        with open(f'losses_{self.name}.pkl', 'rb') as f:
-            loss_values = pickle.load(f)
-
         # Plot the loss values
         plt.figure(figsize=(10, 6))
-        plt.plot(loss_values['loss'], label='Training Loss')
-        plt.plot(loss_values['val_loss'], label='Validation Loss')
+        plt.plot(self.losses['train'], label='Training Loss')
+        plt.plot(self.losses['valid'], label='Validation Loss')
         plt.xlabel('Epochs')
         plt.ylabel('Loss')
         plt.title('Training Loss Over Epochs')
