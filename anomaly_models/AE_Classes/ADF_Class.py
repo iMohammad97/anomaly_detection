@@ -56,7 +56,7 @@ class AugmentedDickeyFullerLSTMAutoencoder:
         inputs = tf.keras.Input(shape=(self.timesteps, self.features))
         x = layers.LSTM(self.lstm_units, return_sequences=True)(inputs)
         x = layers.LSTM(self.latent_dim, return_sequences=False)(x)
-        latent = layers.Dense(self.latent_dim)(x)
+        latent = layers.Dense(self.latent_dim, name='latent')(x)
     
         # Apply ADF test loss to the latent space
         latent_with_loss = ADFTestLoss()(latent, adf_coef=1.0)
@@ -92,7 +92,7 @@ class AugmentedDickeyFullerLSTMAutoencoder:
             mse_loss_tracker.reset_state()
             adf_loss_tracker.reset_state()
     
-            for step in range(0, len(self.train_data_window), batch_size):
+            for step in trange(0, len(self.train_data_window), batch_size, leave=False):
                 batch_data = self.train_data_window[step:step + batch_size]
     
                 with tf.GradientTape() as tape:
@@ -121,8 +121,6 @@ class AugmentedDickeyFullerLSTMAutoencoder:
             self.losses['adf'].append(float(adf_loss_tracker.result().numpy()))
             pbar.set_description(
                 f"MSE Loss = {self.losses['mse'][-1]:.4f}, ADF Loss = {self.losses['adf'][-1]:.4f}")
-    
-        print(f"Loss values saved to losses_{self.name}.pkl")
     
   
     def compute_threshold(self):
@@ -305,8 +303,8 @@ class AugmentedDickeyFullerLSTMAutoencoder:
     def plot_losses(self):
         # Plot the loss values
         plt.figure(figsize=(10, 6))
-        plt.plot(self.losses['mse'], label='MSE Loss')
-        plt.plot(self.losses['kld'], label='KLD Loss')
+        plt.plot(self.losses['mse'], label='MSE Reconstruction Loss')
+        plt.plot(self.losses['adf'], label='ADF Latent Loss')
         plt.xlabel('Epochs')
         plt.ylabel('Loss')
         plt.title('Training Loss Over Epochs')
