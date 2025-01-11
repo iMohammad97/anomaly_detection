@@ -100,7 +100,7 @@ class VariationalLSTMAutoencoder:
             mse_loss_tracker.reset_state()
             kl_loss_tracker.reset_state()
 
-            for step in range(0, len(self.train_data_window), batch_size):
+            for step in trange(0, len(self.train_data_window), batch_size, leave=False):
                 batch_data = self.train_data_window[step:step + batch_size]
 
                 with tf.GradientTape() as tape:
@@ -124,8 +124,6 @@ class VariationalLSTMAutoencoder:
             self.losses['kld'].append(float(kl_loss_tracker.result().numpy()))
             pbar.set_description(
                 f"MSE Loss = {self.losses['mse'][-1]:.4f}, KL Divergence Loss = {self.losses['kld'][-1]:.4f}")
-
-        print(f"Loss values saved to losses_{self.name}.pkl")
 
     def evaluate(self, batch_size=32):
         length = self.test_data.shape[0]
