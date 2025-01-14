@@ -50,7 +50,7 @@ class USAD(nn.Module):
 	def learn(self, train_loader, n_epochs: int):
 		self.train()
 		mse = nn.MSELoss(reduction='none').to(self.device)
-		for n in (pbar := trange(1, n_epochs, + 1)):
+		for n in (pbar := trange(1, n_epochs + 1)):
 			l1s, l2s = [], []
 			for d, a in tqdm(train_loader, leave=False):
 				d = d.to(self.device)
