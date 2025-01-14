@@ -42,7 +42,7 @@ class TimeSeriesAnomalyDetectorKNN:
         return None
 
 
-    def test_func(self, compute_threshold=False, batch_size=100, threads=4):
+    def test_func(self, compute_threshold=False, batch_size=100, threads=10):
         """
         Process the test or train data in batches, using multi-threading for each batch.
     
