@@ -72,6 +72,37 @@ class TimeSeriesAnomalyDetectorKNN:
         return pd.Series(self.y_anomaly)
 
 
+    def calc_anomaly_window_based(self):
+        """
+        Calculate anomaly scores using a window-based aggregation approach.
+        """
+        self.train_func(self.training_data, self.training_data)
+
+        # Step 1: Compute anomaly scores for all windows
+        anomaly_scores = self.test_func(self.test_data)
+
+        # Step 2: Initialize arrays to store per-timestep errors and counts
+        length = len(self.test_data)
+        M = len(anomaly_scores)  # Number of windows
+        timestep_errors = np.zeros(length)
+        counts = np.zeros(length)
+
+        # Step 3: Aggregate window-based scores into per-timestep scores
+        for i in range(M):
+            start = i
+            end = i + self.window_length - 1
+            timestep_errors[start:end + 1] += anomaly_scores[i]
+            counts[start:end + 1] += 1
+
+        # Step 4: Average scores for overlapping windows
+        counts[counts == 0] = 1  # Avoid division by zero
+        timestep_errors /= counts  # Average overlapping window scores
+
+        # Step 5: Return per-timestep anomaly scores as a pandas Series
+        return pd.Series(timestep_errors)
+    
+    
+
     def calculate_cosine_distances(self, test_data, train_data):
         # Normalize training data
         train_norms = np.linalg.norm(train_data, axis=1, keepdims=True)
