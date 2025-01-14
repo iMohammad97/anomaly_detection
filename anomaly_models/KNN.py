@@ -67,7 +67,7 @@ class TimeSeriesAnomalyDetectorKNN:
         return np.concatenate(all_scores)
 
     def calc_anomaly(self, mode='expanding'):
-        self.train_func(self.training_data,self.training_data)
+        self.train_func()
         self.y_anomaly = np.zeros(self.window_length-1)
         self.y_anomaly = np.append(self.y_anomaly, self.test_func(self.test_data))
         return pd.Series(self.y_anomaly)
@@ -77,7 +77,7 @@ class TimeSeriesAnomalyDetectorKNN:
         """
         Calculate anomaly scores using a window-based aggregation approach.
         """
-        self.train_func(self.training_data, self.training_data)
+        self.train_func()
 
         # Step 1: Compute anomaly scores for all windows
         anomaly_scores = self.test_func(self.test_data)
@@ -134,7 +134,7 @@ class TimeSeriesAnomalyDetectorKNN:
     def calculate_anomaly_threshold(self, quantile=0.95):
         logging.info("Calculating anomaly threshold from training data.")
         
-        self.train_func(self.training_data, self.training_data)
+        self.train_func()
         
         # Compute anomaly scores for training data
         anomaly_scores = self.test_func(self.training_data)
