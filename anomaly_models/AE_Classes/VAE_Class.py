@@ -78,7 +78,7 @@ class VariationalLSTMAutoencoder:
         mse = np.mean(np.square(self.train_data_window - rec), axis=(1, 2))
         self.threshold = np.mean(mse) + self.threshold_sigma * np.std(mse)
 
-    def train(self, batch_size=32, epochs=50, optimizer='adam'):
+    def train(self, batch_size: int = 32, epochs: int = 50, optimizer: str = 'adam', patience: int = 5):
         # Ensure the optimizer is set up correctly
         if isinstance(optimizer, str):
             optimizer = tf.keras.optimizers.get(optimizer)  # Get optimizer by name
@@ -94,11 +94,16 @@ class VariationalLSTMAutoencoder:
         mse_loss_tracker = tf.keras.metrics.Mean(name="mse_loss")
         kl_loss_tracker = tf.keras.metrics.Mean(name="kl_loss")
 
+        # Early stopping variables 
+        best_epoch_loss = float('inf') 
+        patience_counter = 0
+
         # Training loop
         for epoch in (pbar := trange(epochs)):
 
             mse_loss_tracker.reset_state()
             kl_loss_tracker.reset_state()
+            epoch_loss = 0
 
             for step in trange(0, len(self.train_data_window), batch_size, leave=False):
                 batch_data = self.train_data_window[step:step + batch_size]
@@ -119,11 +124,23 @@ class VariationalLSTMAutoencoder:
                 mse_loss_tracker.update_state(mse_loss)
                 kl_loss_tracker.update_state(kl_loss)
 
+                epoch_loss += total_loss
+
             # Log losses after each epoch
             self.losses['mse'].append(float(mse_loss_tracker.result().numpy()))
             self.losses['kld'].append(float(kl_loss_tracker.result().numpy()))
             pbar.set_description(
                 f"MSE Loss = {self.losses['mse'][-1]:.4f}, KL Divergence Loss = {self.losses['kld'][-1]:.4f}")
+
+            # Eearly stopping
+            if epoch_loss < best_epoch_loss:
+                best_epoch_loss = epoch_loss
+                patience_counter = 0
+            else:
+                patience_counter += 1
+                if patience_counter >= patience: 
+                    print(f"Early stopping triggered after {epoch + 1} epochs.") 
+                    break
 
     def evaluate(self, batch_size=32):
         length = self.test_data.shape[0]
