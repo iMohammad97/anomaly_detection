@@ -69,7 +69,7 @@ class StationaryLSTMAutoencoder:
         self.model = models.Model(inputs, outputs)  # Return only the outputs (no KL divergence in this case)
         return self.model
 
-    def train(self, batch_size=32, epochs=50, optimizer='adam'):
+    def train(self, batch_size: int = 32, epochs: int = 50, optimizer: str = 'adam', patience: int = 5):
         # Ensure the optimizer is set up correctly
         if isinstance(optimizer, str):
             optimizer = tf.keras.optimizers.get(optimizer)  # Get optimizer by name
@@ -86,6 +86,10 @@ class StationaryLSTMAutoencoder:
         mean_loss_tracker = tf.keras.metrics.Mean(name="mean_loss")
         std_loss_tracker = tf.keras.metrics.Mean(name="std_loss")
 
+        # Early stopping variables 
+        best_epoch_loss = float('inf') 
+        patience_counter = 0
+
         # Training loop
         for epoch in (pbar := trange(epochs)):
             mse_loss_tracker.reset_state()
@@ -94,7 +98,7 @@ class StationaryLSTMAutoencoder:
 
             for step in trange(0, len(self.train_data_window), batch_size, leave=False):
                 batch_data = self.train_data_window[step:step + batch_size]
-
+                epoch_loss = 0 # Should be changed to val loss later
                 with tf.GradientTape() as tape:
                     # Forward pass
                     reconstructed = self.model(batch_data, training=True)
@@ -118,6 +122,8 @@ class StationaryLSTMAutoencoder:
                 mean_loss_tracker.update_state(mean_loss)
                 std_loss_tracker.update_state(std_loss)
 
+                epoch_loss += total_loss
+
             # Log losses after each epoch
             self.losses['mse'].append(float(mse_loss_tracker.result().numpy()))
             self.losses['mean'].append(float(mean_loss_tracker.result().numpy()))
@@ -125,6 +131,16 @@ class StationaryLSTMAutoencoder:
             pbar.set_description(
                 f"MSE Loss = {self.losses['mse'][-1]:.4f}, Mean Loss = {self.losses['mean'][-1]:.4f}, STD Loss = {self.losses['std'][-1]:.4f}"
             )
+
+            # Early stopping logic 
+            if epoch_loss < best_epoch_loss: 
+                best_epoch_loss = epoch_loss 
+                patience_counter = 0  
+            else: 
+                patience_counter += 1 
+                if patience_counter >= patience: 
+                    print(f"Early stopping triggered after {epoch + 1} epochs.") 
+                    break
 
     def compute_threshold(self):
         rec = self.model.predict(self.train_data_window, verbose=0)
