@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import logging
+from concurrent.futures import ThreadPoolExecutor
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -40,7 +41,16 @@ class TimeSeriesAnomalyDetectorKNN:
         self.train_data_matrix = self.transform_to_matrix(flattened_train)
         return None
 
-    def test_func(self, is_threshold=False, batch_size=100):
+
+    def test_func(self, is_threshold=False, batch_size=100, threads=4):
+        """
+        Process the test or train data in batches, using multi-threading for each batch.
+    
+        :param is_threshold: Whether to compute for threshold (uses training data).
+        :param batch_size: Size of each batch.
+        :param threads: Number of threads to use for parallel processing.
+        """
+        # Select data
         if is_threshold:
             data = self.train_data_matrix
         else:
@@ -52,24 +62,32 @@ class TimeSeriesAnomalyDetectorKNN:
         n_batches = (n_test + batch_size - 1) // batch_size  # Compute number of batches
         all_scores = []
     
-        for batch_idx in range(n_batches):
-            # Select a batch of test windows
-            start_idx = batch_idx * batch_size
-            end_idx = min((batch_idx + 1) * batch_size, n_test)
+        # Helper function to process a single batch
+        def process_batch(start_idx, end_idx):
             batch = data[start_idx:end_idx]
-    
-            # Compute distances for the batch
             if self.metric == 'cosine':
-                distance_matrix = self.calculate_cosine_distances()
+                distance_matrix = self.calculate_cosine_distances(batch, self.training_data)
             elif self.metric == 'mahalanobis':
-                distance_matrix = self.calculate_mahalanobis_distances(self.sigma)
+                distance_matrix = self.calculate_mahalanobis_distances(batch, self.training_data, self.sigma)
+            # Return batch scores
+            return np.sum(np.sort(distance_matrix, axis=1)[:, :self.k], axis=1)
     
-            # Sum the k smallest distances for each test sample in the batch
-            batch_scores = np.sum(np.sort(distance_matrix, axis=1)[:, :self.k], axis=1)
-            all_scores.append(batch_scores)
+        # Multi-threaded batch processing
+        with ThreadPoolExecutor(max_workers=threads) as executor:
+            # Submit each batch to the thread pool
+            futures = []
+            for batch_idx in range(n_batches):
+                start_idx = batch_idx * batch_size
+                end_idx = min((batch_idx + 1) * batch_size, n_test)
+                futures.append(executor.submit(process_batch, start_idx, end_idx))
     
-        # Concatenate scores from all batches
+            # Collect results
+            for future in futures:
+                all_scores.append(future.result())
+    
+        # Concatenate all scores
         return np.concatenate(all_scores)
+
 
     def calc_anomaly(self, mode='expanding'):
         self.train_func()
