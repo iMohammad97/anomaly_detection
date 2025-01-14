@@ -38,23 +38,32 @@ class TimeSeriesAnomalyDetectorKNN:
         self.training_data = self.transform_to_matrix(flattened_train)
         return None
 
-    def test_func(self, X_test):
+    def test_func(self, X_test, batch_size=100):
         flattened_test = X_test.to_numpy().flatten()
-        # print(X_test)
-        # if len(flattened_test) < self.window_length:
-        #     raise ValueError(f"Test data length ({len(flattened_test)}) must be greater than or equal to the window length ({self.window_length}).")
         self.test_data = self.transform_to_matrix(flattened_test)
-
-        if self.metric == 'cosine':
-            batch = self.test_data
-            distance_matrix = self.calculate_cosine_distances(batch, self.training_data)
-        elif self.metric == 'mahalanobis':
-            batch = self.test_data
-            distance_matrix = self.calculate_mahalanobis_distances(batch, self.training_data, self.sigma)
-
-        # Find the k smallest distances and sum them up for each test data point in the batch
-        results = np.sum(np.sort(distance_matrix, axis=1)[:, :self.k], axis=1)
-        return results
+    
+        n_test = self.test_data.shape[0]
+        n_batches = (n_test + batch_size - 1) // batch_size  # Compute number of batches
+        all_scores = []
+    
+        for batch_idx in range(n_batches):
+            # Select a batch of test windows
+            start_idx = batch_idx * batch_size
+            end_idx = min((batch_idx + 1) * batch_size, n_test)
+            batch = self.test_data[start_idx:end_idx]
+    
+            # Compute distances for the batch
+            if self.metric == 'cosine':
+                distance_matrix = self.calculate_cosine_distances(batch, self.training_data)
+            elif self.metric == 'mahalanobis':
+                distance_matrix = self.calculate_mahalanobis_distances(batch, self.training_data, self.sigma)
+    
+            # Sum the k smallest distances for each test sample in the batch
+            batch_scores = np.sum(np.sort(distance_matrix, axis=1)[:, :self.k], axis=1)
+            all_scores.append(batch_scores)
+    
+        # Concatenate scores from all batches
+        return np.concatenate(all_scores)
 
     def calc_anomaly(self, mode='expanding'):
         self.train_func(self.training_data,self.training_data)
@@ -62,32 +71,33 @@ class TimeSeriesAnomalyDetectorKNN:
         self.y_anomaly = np.append(self.y_anomaly, self.test_func(self.test_data))
         return pd.Series(self.y_anomaly)
 
+
     def calculate_cosine_distances(self, test_data, train_data):
         # Normalize training data
-        train_norms = np.linalg.norm(train_data, axis=1)
-        train_normalized = train_data / train_norms[:, np.newaxis]
-
+        train_norms = np.linalg.norm(train_data, axis=1, keepdims=True)
+        train_normalized = train_data / train_norms  # Shape: (n_train, d)
+    
         # Normalize test data
-        test_norms = np.linalg.norm(test_data, axis=1)
-        test_normalized = test_data / test_norms[:, np.newaxis]
-
-        # Compute cosine similarity matrix
-        similarity_matrix = np.dot(test_normalized, train_normalized.T)
-
+        test_norms = np.linalg.norm(test_data, axis=1, keepdims=True)
+        test_normalized = test_data / test_norms  # Shape: (n_test, d)
+    
+        # Batch compute cosine similarity (dot product of normalized vectors)
+        similarity_matrix = np.dot(test_normalized, train_normalized.T)  # Shape: (n_test, n_train)
+    
         # Convert similarity to distance
-        distance_matrix = 1 - similarity_matrix
-
+        distance_matrix = 1 - similarity_matrix  # Shape: (n_test, n_train)
+    
         return distance_matrix
 
     def calculate_mahalanobis_distances(self, test_data, train_data, inv_covmat):
-        # Calculate differences between each test and train pair
-        diff = test_data[:, np.newaxis, :] - train_data
-        # Apply the Mahalanobis formula using matrix multiplication
-        left_term = np.dot(diff, inv_covmat)
-        mahalanobis_distance_squared = np.einsum('ijk,ijk->ij', left_term, diff)
-
-        return np.sqrt(mahalanobis_distance_squared)
-
+        # Compute differences between test and train batches
+        diff = test_data[:, np.newaxis, :] - train_data[np.newaxis, :, :]  # Shape: (n_test, n_train, d)
+    
+        # Batch apply Mahalanobis formula
+        left_term = np.einsum('ijk,kl->ijl', diff, inv_covmat)  # Shape: (n_test, n_train, d)
+        mahalanobis_distance_squared = np.einsum('ijk,ijk->ij', left_term, diff)  # Shape: (n_test, n_train)
+    
+        return np.sqrt(mahalanobis_distance_squared)  # Shape: (n_test, n_train)
 
     def calculate_anomaly_threshold(self, quantile=0.95):
         """
