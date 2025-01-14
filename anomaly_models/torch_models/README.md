@@ -40,6 +40,26 @@ model.learn(train_loader, n_epochs=10)
 model.plot_results(test_loader)
 ```
 
+## USAD
+[USAD : UnSupervised Anomaly Detection on Multivariate Time Series](https://dl.acm.org/doi/pdf/10.1145/3394486.3403392)
+KDD 20
+
+sample usage:
+
+```python
+from anomaly_models.torch_models import usad
+from utilities.torch_ucr import get_dataloaders
+
+# Dataset
+dataset_path = '../../UCR/UCR2_preprocessed'
+train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=5, batch_size=64)
+
+# Training  
+model = USAD()
+model.learn(train_loader, n_epochs=10)
+model.plot_results(test_loader)
+```
+
 ## CAE-M
 [Unsupervised Deep Anomaly Detection for Multi-Sensor Time-Series Signals](https://arxiv.org/pdf/2107.12626)
 TKDE 2021

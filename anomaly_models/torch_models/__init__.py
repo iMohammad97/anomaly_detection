@@ -6,6 +6,7 @@
 
 from .dagmm import DAGMM
 from .mad_gan import MAD_GAN
+from .usad import USAD
 from .cae_m import CAE_M
 from .ae import AE
 from .vae import VAE

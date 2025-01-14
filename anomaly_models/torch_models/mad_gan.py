@@ -67,19 +67,19 @@ class MAD_GAN(nn.Module):
             pbar.set_description(f'MSE = {np.mean(mses):.4f},\tG = {np.mean(gls):.4f},\tD = {np.mean(dls):.4f}')
             self.losses.append(np.mean(gls) + np.mean(dls))
 
-    def predict(self, data):
-        self.eval()
-        l = nn.MSELoss(reduction='none')
-        outputs = []
-        for d, a in data:
-            d = d.to(self.device)
-            z, _, _ = self.forward(d)
-            outputs.append(z)
-        outputs = torch.stack(outputs)
-        y_pred = outputs[:, data.shape[1] - self.feats:data.shape[1]].view(-1, self.feats)
-        loss = l(outputs, data)
-        loss = loss[:, data.shape[1] - self.feats:data.shape[1]].view(-1, self.feats)
-        return loss.detach().numpy(), y_pred.detach().numpy()
+    # def predict(self, data):
+    #     self.eval()
+    #     l = nn.MSELoss(reduction='none')
+    #     outputs = []
+    #     for d, a in data:
+    #         d = d.to(self.device)
+    #         z, _, _ = self.forward(d)
+    #         outputs.append(z)
+    #     outputs = torch.stack(outputs)
+    #     y_pred = outputs[:, data.shape[1] - self.feats:data.shape[1]].view(-1, self.feats)
+    #     loss = l(outputs, data)
+    #     loss = loss[:, data.shape[1] - self.feats:data.shape[1]].view(-1, self.feats)
+    #     return loss.detach().numpy(), y_pred.detach().numpy()
 
     def predict(self, data, name: str = ''):
         inputs, anomalies, outputs, errors = [], [], [], []
