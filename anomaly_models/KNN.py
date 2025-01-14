@@ -32,20 +32,14 @@ class TimeSeriesAnomalyDetectorKNN:
         return matrix
 
     def train_func(self, X_train, y_train):
-        if isinstance(X_train, pd.DataFrame) or isinstance(X_train, pd.Series):
-            flattened_train = X_train.to_numpy().flatten()
-        else:
-            flattened_train = X_train.flatten()
+        flattened_train = X_train.flatten()
         if len(flattened_train) < self.window_length:
             raise ValueError(f"Training data length ({len(flattened_train)}) must be greater than or equal to the window length ({self.window_length}).")
         self.training_data = self.transform_to_matrix(flattened_train)
         return None
 
     def test_func(self, X_test, batch_size=100):
-        if isinstance(X_test, pd.DataFrame) or isinstance(X_test, pd.Series):
-            flattened_test = X_test.to_numpy().flatten()
-        else:
-            flattened_test = X_test.flatten()
+        flattened_test = X_test.flatten()
         self.test_data = self.transform_to_matrix(flattened_test)
     
         n_test = self.test_data.shape[0]
