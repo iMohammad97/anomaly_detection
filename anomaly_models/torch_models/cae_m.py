@@ -24,6 +24,7 @@ class CAE_M(nn.Module):
         )
         self.to(device)
         self.optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=1e-5)
+        self.losses = []
 
     def forward(self, g):
         ## Encode
@@ -36,7 +37,6 @@ class CAE_M(nn.Module):
     def learn(self, train_loader, n_epochs: int):
         self.train()
         mse = nn.MSELoss(reduction='mean').to(self.device)
-        losses = []
         for _ in (pbar := trange(n_epochs)):
             l1s = []
             for d, a in tqdm(train_loader, leave=False):
@@ -48,5 +48,4 @@ class CAE_M(nn.Module):
                 loss.backward()
                 self.optimizer.step()
             pbar.set_description(f'MSE = {np.mean(l1s):.4f}')
-            losses.append(np.mean(l1s))
-        return losses
+            self.losses.append(np.mean(l1s))

@@ -37,6 +37,7 @@ class DAGMM(nn.Module):
         self.to(device)
         self.optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=1e-5)
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, 5, 0.9)
+        self.losses1, self.losses2 = [], []
 
     def compute_reconstruction(self, x, x_hat):
         relative_euclidean_distance = (x - x_hat).norm(2, dim=1) / x.norm(2, dim=1)
@@ -48,7 +49,7 @@ class DAGMM(nn.Module):
         x = x.view(-1, self.n)
         z_c = self.encoder(x)
         x_hat = self.decoder(z_c)
-        ## Compute Reconstructoin
+        ## Compute Reconstruction
         rec_1, rec_2 = self.compute_reconstruction(x, x_hat)
         z = torch.cat([z_c, rec_1.unsqueeze(-1), rec_2.unsqueeze(-1)], dim=1)
         ## Estimate
@@ -59,7 +60,6 @@ class DAGMM(nn.Module):
         """Train the model and return the average loss and learning rate."""
         self.train(True)
         l = nn.MSELoss(reduction='none').to(self.device)
-        loss1s, loss2s = [], []
         for _ in (pbar := trange(n_epochs)):
             l1s, l2s = [], []
             for d, _ in tqdm(data, leave=False):
@@ -75,8 +75,7 @@ class DAGMM(nn.Module):
                 self.scheduler.step()
             l1, l2 = np.mean(l1s), np.mean(l2s)
             pbar.set_description(f'L1 = {l1:.3f},\tL2 = {l2:.3f}')
-            loss1s.append(l1), loss2s.append(l2)
-        return loss1s, loss2s
+            self.losses1.append(l1), self.losses2.append(l2)
 
     def predict(self, data):
         """Predict using the model and return the loss and predictions."""

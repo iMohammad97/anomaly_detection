@@ -58,6 +58,23 @@ model = CAE_M(window_size=64)
 model.learn(train_loader, n_epochs=10)
 ```
 
+## AE
+
+```python
+from anomaly_models.torch_models import AE
+from utilities.torch_ucr import get_dataloaders
+
+# Dataset
+dataset_path = '../../UCR/UCR2_preprocessed'
+train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=256, batch_size=64)
+
+# Training  
+model = AE(window_size=256, device='cuda') # or device='cpu'
+model.learn(train_loader, n_epochs=10)
+model.plot_results(test_loader)
+```
+
+
 ## SAE
 
 sample usage:
@@ -73,6 +90,7 @@ train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=256, 
 # Training  
 model = SAE(window_size=256, device='cuda') # or device='cpu'
 model.learn(train_loader, n_epochs=10)
+model.plot_results(test_loader)
 ```
 
 # References

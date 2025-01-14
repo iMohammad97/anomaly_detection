@@ -29,6 +29,7 @@ class MAD_GAN(nn.Module):
         )
         self.to(device)
         self.optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=1e-5)
+        self.losses = []
 
     def forward(self, g):
         ## Generate
@@ -42,7 +43,6 @@ class MAD_GAN(nn.Module):
         self.train()
         bcel = nn.BCELoss(reduction='mean').to(self.device)
         msel = nn.MSELoss(reduction='mean').to(self.device)
-        losses = []
         for _ in (pbar := trange(n_epochs)):
             mses, gls, dls = [], [], []
             for d, _ in tqdm(train_loader, leave=False):
@@ -65,8 +65,7 @@ class MAD_GAN(nn.Module):
                 self.optimizer.step()
                 mses.append(mse.item()), gls.append(gl.item()), dls.append(dl.item())
             pbar.set_description(f'MSE = {np.mean(mses):.4f},\tG = {np.mean(gls):.4f},\tD = {np.mean(dls):.4f}')
-            losses.append(np.mean(gls) + np.mean(dls))
-        return losses
+            self.losses.append(np.mean(gls) + np.mean(dls))
 
     def predict(self, data):
         self.eval()

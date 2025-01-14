@@ -35,7 +35,7 @@ class UCR(Dataset):
 def get_dataloaders(path: str, window_size: int, batch_size: int, step_size: int = 1):
     # Create datasets
     train_dataset = UCR(path, window_size, step_size=step_size, train=True)
-    test_dataset = UCR(path, window_size, step_size=step_size, train=False)
+    test_dataset = UCR(path, window_size, step_size=1, train=False) # test step size should always be 1
     # Create DataLoaders
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
