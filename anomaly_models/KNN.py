@@ -2,6 +2,9 @@ import numpy as np
 import pandas as pd
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from matplotlib import pyplot as plt
+import plotly.graph_objects as go
+
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
