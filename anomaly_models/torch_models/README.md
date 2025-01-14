@@ -37,6 +37,7 @@ train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=5, ba
 # Training 
 model = MAD_GAN()
 model.learn(train_loader, n_epochs=10)
+model.plot_results(test_loader)
 ```
 
 ## CAE-M
@@ -56,6 +57,7 @@ train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=64, b
 # Training  
 model = CAE_M(window_size=64)
 model.learn(train_loader, n_epochs=10)
+model.plot_results(test_loader)
 ```
 
 ## AE
@@ -70,6 +72,22 @@ train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=256, 
 
 # Training  
 model = AE(window_size=256, device='cuda') # or device='cpu'
+model.learn(train_loader, n_epochs=10)
+model.plot_results(test_loader)
+```
+
+## VAE
+
+```python
+from anomaly_models.torch_models import VAE
+from utilities.torch_ucr import get_dataloaders
+
+# Dataset
+dataset_path = '../../UCR/UCR2_preprocessed'
+train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=256, batch_size=64)
+
+# Training  
+model = VAE(window_size=256, device='cuda') # or device='cpu'
 model.learn(train_loader, n_epochs=10)
 model.plot_results(test_loader)
 ```

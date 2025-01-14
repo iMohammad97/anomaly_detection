@@ -1,85 +1,83 @@
 import torch
-from torch import nn
+import torch.nn as nn
 from tqdm.notebook import tqdm, trange
 import numpy as np
 import plotly.graph_objects as go
 
-# MAD_GAN (ICANN 19)
-class MAD_GAN(nn.Module):
-    def __init__(self, feats: int = 1, device: str = 'cpu'):
-        super(MAD_GAN, self).__init__()
-        self.name = 'MAD_GAN'
+class VAE(nn.Module):
+    def __init__(self, n_features: int = 1, window_size: int = 256, latent_dim: int = 32, lstm_units: int = 64, device: str = 'cpu'):
+        super(VAE, self).__init__()
+        self.name = 'VAE'
         self.lr = 0.0001
         self.device = device
-        self.n_feats = feats
-        self.n_hidden = 16
-        self.n_window = 5 # MAD_GAN w_size = 5
-        self.n = self.n_feats * self.n_window
-        self.generator = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(self.n, self.n_hidden), nn.LeakyReLU(True),
-            nn.Linear(self.n_hidden, self.n_hidden), nn.LeakyReLU(True),
-            nn.Linear(self.n_hidden, self.n), nn.Sigmoid(),
-        )
-        self.discriminator = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(self.n, self.n_hidden), nn.LeakyReLU(True),
-            nn.Linear(self.n_hidden, self.n_hidden), nn.LeakyReLU(True),
-            nn.Linear(self.n_hidden, 1), nn.Sigmoid(),
-        )
+        self.n_features = n_features
+        self.window_size = window_size
+        self.latent_dim = latent_dim
+        self.lstm_units = lstm_units
+
+        self.encoder_lstm1 = nn.LSTM(n_features, lstm_units, batch_first=True)
+        self.encoder_lstm2 = nn.LSTM(lstm_units, lstm_units, batch_first=True)
+        self.encoder_lstm3 = nn.LSTM(lstm_units, lstm_units, batch_first=True)
+
+        self.fc_mu = nn.Linear(lstm_units * window_size, latent_dim)
+        self.fc_logvar = nn.Linear(lstm_units * window_size, latent_dim)
+
+        self.decoder_lstm1 = nn.LSTM(latent_dim, lstm_units, batch_first=True)
+        self.decoder_lstm2 = nn.LSTM(lstm_units, lstm_units, batch_first=True)
+        self.decoder_lstm3 = nn.LSTM(lstm_units, n_features, batch_first=True)
+
         self.to(device)
+
         self.optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=1e-5)
         self.losses = []
 
-    def forward(self, g):
-        ## Generate
-        z = self.generator(g)
-        ## Discriminator
-        real_score = self.discriminator(g)
-        fake_score = self.discriminator(z)
-        return z, real_score, fake_score
+    def encode(self, x):
+        x, _ = self.encoder_lstm1(x)
+        x, _ = self.encoder_lstm2(x)
+        x, _ = self.encoder_lstm3(x)
+        x = x.reshape(x.size(0), -1)
+        mu = self.fc_mu(x)
+        logvar = self.fc_logvar(x)
+        return mu, logvar
+
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
+    def decode(self, z):
+        z = z.unsqueeze(1).repeat(1, self.window_size, 1)
+        x, _ = self.decoder_lstm1(z)
+        x, _ = self.decoder_lstm2(x)
+        output, _ = self.decoder_lstm3(x)
+        return output
+
+    def forward(self, x):
+        mu, logvar = self.encode(x)
+        z = self.reparameterize(mu, logvar)
+        output = self.decode(z)
+        return output, mu, logvar
+
+    def loss_function(self, recon_x, x, mu, logvar):
+        BCE = nn.MSELoss(reduction='mean')(recon_x, x)
+        KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        return BCE, KLD
 
     def learn(self, train_loader, n_epochs: int):
         self.train()
-        bcel = nn.BCELoss(reduction='mean').to(self.device)
-        msel = nn.MSELoss(reduction='mean').to(self.device)
         for _ in (pbar := trange(n_epochs)):
-            mses, gls, dls = [], [], []
+            mses, klds = [], []
             for d, _ in tqdm(train_loader, leave=False):
                 d = d.to(self.device)
-                # training discriminator
-                self.discriminator.zero_grad()
-                _, real, fake = self.forward(d)
-                real_label, fake_label = 0.9 * torch.ones_like(real), 0.1 * torch.ones_like(fake)
-                dl = bcel(real, real_label) + bcel(fake, fake_label)
-                dl.backward()
-                self.generator.zero_grad()
+                recon, mu, logvar = self.forward(d)
+                bce, kld = self.loss_function(recon, d, mu, logvar)
+                loss = bce + kld
+                mses.append(bce.item()), klds.append(kld.item())
+                self.optimizer.zero_grad()
+                loss.backward()
                 self.optimizer.step()
-                # training generator
-                z, _, fake = self.forward(d)
-                mse = msel(z, d.squeeze())
-                gl = bcel(fake, real_label)
-                tl = gl + mse
-                tl.backward()
-                self.discriminator.zero_grad()
-                self.optimizer.step()
-                mses.append(mse.item()), gls.append(gl.item()), dls.append(dl.item())
-            pbar.set_description(f'MSE = {np.mean(mses):.4f},\tG = {np.mean(gls):.4f},\tD = {np.mean(dls):.4f}')
-            self.losses.append(np.mean(gls) + np.mean(dls))
-
-    def predict(self, data):
-        self.eval()
-        l = nn.MSELoss(reduction='none')
-        outputs = []
-        for d, a in data:
-            d = d.to(self.device)
-            z, _, _ = self.forward(d)
-            outputs.append(z)
-        outputs = torch.stack(outputs)
-        y_pred = outputs[:, data.shape[1] - self.feats:data.shape[1]].view(-1, self.feats)
-        loss = l(outputs, data)
-        loss = loss[:, data.shape[1] - self.feats:data.shape[1]].view(-1, self.feats)
-        return loss.detach().numpy(), y_pred.detach().numpy()
+            pbar.set_description(f'MSE = {np.mean(mses):.4f}, KLD = {np.mean(klds):.4f}')
+            self.losses.append(np.mean(mses) + np.mean(klds))
 
     def predict(self, data, name: str = ''):
         inputs, anomalies, outputs, errors = [], [], [], []
@@ -90,7 +88,7 @@ class MAD_GAN(nn.Module):
             window = window.to(self.device)
             recon, _, _ = self.forward(window)
             outputs.append(recon.cpu().detach().numpy().squeeze().T[-1])
-            errors.append(mse(window.squeeze(), recon).cpu().detach().numpy().squeeze().T[-1])
+            errors.append(mse(window, recon).cpu().detach().numpy().squeeze().T[-1])
         inputs = np.concatenate(inputs)
         anomalies = np.concatenate(anomalies)
         outputs = np.concatenate(outputs)
