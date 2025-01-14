@@ -25,7 +25,7 @@ class TimeSeriesAnomalyDetectorKNN:
         self.anomaly_errors = np.zeros(len(self.test_data))
         self.metric = metric
         self.anomaly_preds = np.zeros(len(self.test_data))
-
+        self.threshold = 0
         
 
     def transform_to_matrix(self, time_series):
