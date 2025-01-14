@@ -71,7 +71,7 @@ class AugmentedDickeyFullerLSTMAutoencoder:
         self.model = models.Model(inputs, outputs)
         return self.model
     
-    def train(self, batch_size=32, epochs=50, optimizer='adam'):
+    def train(self, batch_size: int = 32, epochs: int = 50, optimizer: str = 'adam', patience: int = 5):
         # Ensure the optimizer is set up correctly
         if isinstance(optimizer, str):
             optimizer = tf.keras.optimizers.get(optimizer)  # Get optimizer by name
@@ -86,15 +86,20 @@ class AugmentedDickeyFullerLSTMAutoencoder:
         # Track losses
         mse_loss_tracker = tf.keras.metrics.Mean(name="mse_loss")
         adf_loss_tracker = tf.keras.metrics.Mean(name="adf_loss")
+
+        # Early stopping variables 
+        best_epoch_loss = float('inf') 
+        patience_counter = 0
     
         # Training loop
         for epoch in (pbar := trange(epochs)):
             mse_loss_tracker.reset_state()
             adf_loss_tracker.reset_state()
+            epoch_loss = 0
     
             for step in trange(0, len(self.train_data_window), batch_size, leave=False):
                 batch_data = self.train_data_window[step:step + batch_size]
-    
+
                 with tf.GradientTape() as tape:
                     # Forward pass
                     reconstructed = self.model(batch_data, training=True)
@@ -115,12 +120,24 @@ class AugmentedDickeyFullerLSTMAutoencoder:
                 # Track losses
                 mse_loss_tracker.update_state(mse_loss)
                 adf_loss_tracker.update_state(adf_loss)
+
+                epoch_loss += total_loss
     
             # Log losses after each epoch
             self.losses['mse'].append(float(mse_loss_tracker.result().numpy()))
             self.losses['adf'].append(float(adf_loss_tracker.result().numpy()))
             pbar.set_description(
                 f"MSE Loss = {self.losses['mse'][-1]:.4f}, ADF Loss = {self.losses['adf'][-1]:.4f}")
+
+            # Early stopping
+            if epoch_loss < best_epoch_loss:
+                best_epoch_loss = epoch_loss
+                patience_counter = 0
+            else:
+                patience_counter += 1
+                if patience_counter >= patience:
+                    print(f"Early stopping triggered after {epoch + 1} epochs.") 
+                    break
     
   
     def compute_threshold(self):
