@@ -59,9 +59,9 @@ class TimeSeriesAnomalyDetectorKNN:
     
             # Compute distances for the batch
             if self.metric == 'cosine':
-                distance_matrix = self.calculate_cosine_distances(batch)
+                distance_matrix = self.calculate_cosine_distances()
             elif self.metric == 'mahalanobis':
-                distance_matrix = self.calculate_mahalanobis_distances(batch, self.sigma)
+                distance_matrix = self.calculate_mahalanobis_distances(self.sigma)
     
             # Sum the k smallest distances for each test sample in the batch
             batch_scores = np.sum(np.sort(distance_matrix, axis=1)[:, :self.k], axis=1)
