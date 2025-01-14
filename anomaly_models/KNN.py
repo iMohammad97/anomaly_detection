@@ -39,7 +39,7 @@ class TimeSeriesAnomalyDetectorKNN:
         self.train_data_matrix = self.transform_to_matrix(flattened_train)
         return None
 
-    def test_func(self, is_threshold=false, batch_size=100):
+    def test_func(self, is_threshold=False, batch_size=100):
         if is_threshold:
             data = self.train_data_matrix
         else:
@@ -141,7 +141,7 @@ class TimeSeriesAnomalyDetectorKNN:
         self.train_func()
         
         # Compute anomaly scores for training data
-        anomaly_scores = self.test_func()
+        anomaly_scores = self.test_func(True)
         
         # Compute the threshold based on the specified quantile
         threshold = np.quantile(anomaly_scores, quantile)
