@@ -6,12 +6,13 @@ import logging
 logging.basicConfig(level=logging.INFO)
 
 class TimeSeriesAnomalyDetectorKNN:
-    def __init__(self, k, train, test, dim=1, metric='cosine',step_period=10,window_length=100):
+    def __init__(self, k, train, test, Y_labels=None, dim=1, metric='cosine',step_period=10,window_length=100):
         self.window_length = window_length
         self.step_period = step_period
         self.training_data = train
         self.test_data = test
         self.labels = None
+        self.Y_labels = Y_labels  # Ground truth labels for actual anomalies
         self.k = k
         self.dim = dim
         self.sigma = np.diag(np.ones(self.dim))
@@ -131,12 +132,6 @@ class TimeSeriesAnomalyDetectorKNN:
         return np.sqrt(mahalanobis_distance_squared)  # Shape: (n_test, n_train)
 
     def calculate_anomaly_threshold(self, quantile=0.95):
-        """
-        Calculate anomaly threshold based on training data.
-        
-        :param quantile: The quantile to use for the threshold. Defaults to 0.95.
-        :return: Threshold value for anomaly detection.
-        """
         logging.info("Calculating anomaly threshold from training data.")
         
         self.train_func(self.training_data, self.training_data)
@@ -149,6 +144,122 @@ class TimeSeriesAnomalyDetectorKNN:
         
         logging.info(f"Calculated threshold: {threshold}")
         return threshold
+
+
+    def save_state(self, file_path: str):
+        state = {
+            'training_data': self.training_data.tolist() if self.training_data is not None else None,
+            'test_data': self.test_data.tolist() if self.test_data is not None else None,
+            'labels': self.labels.tolist() if self.labels is not None else None,
+            'window_length': self.window_length,
+            'step_period': self.step_period,
+            'k': self.k,
+            'dim': self.dim,
+            'metric': self.metric,
+            'anomaly_scores': self.y_anomaly.tolist() if self.y_anomaly is not None else None
+        }
+
+        with open(file_path, 'w') as file:
+            json.dump(state, file)
+        print(f"State saved to {file_path}")
+
+    def load_state(self, file_path: str):
+        with open(file_path, 'r') as file:
+            state = json.load(file)
+
+        # Restore attributes
+        self.training_data = np.array(state['training_data']) if state['training_data'] is not None else None
+        self.test_data = np.array(state['test_data']) if state['test_data'] is not None else None
+        self.labels = np.array(state['labels']) if state['labels'] is not None else None
+        self.window_length = state['window_length']
+        self.step_period = state['step_period']
+        self.k = state['k']
+        self.dim = state['dim']
+        self.metric = state['metric']
+        self.y_anomaly = np.array(state['anomaly_scores']) if state['anomaly_scores'] is not None else None
+
+        print(f"State loaded from {file_path}")
+    
+    def plot_results(self, size=800, threshold=None):
+        """
+        Plot the test data, anomaly scores, and highlight anomalies using both internal labels and ground truth labels.
+    
+        :param size: Width of the plot.
+        :param threshold: Optional threshold to highlight predicted anomalies.
+        """
+        # Flatten and prepare data
+        test_data = self.test_data.ravel() if self.test_data is not None else []
+        anomaly_scores = self.y_anomaly if self.y_anomaly is not None else []
+        Y_labels = self.Y_labels.ravel() if self.Y_labels is not None else []
+        labels = self.labels.ravel() if self.labels is not None else []
+    
+        # Check if lengths match
+        if len(test_data) != len(anomaly_scores):
+            raise ValueError("Test data and anomaly scores must have the same length.")
+        if self.Y_labels is not None and len(test_data) != len(Y_labels):
+            raise ValueError("Test data and ground truth labels must have the same length.")
+        if self.labels is not None and len(test_data) != len(labels):
+            raise ValueError("Test data and internal labels must have the same length.")
+    
+        # Determine plot width
+        plot_width = max(size, len(test_data) * 2)
+    
+        # Create a figure
+        fig = go.Figure()
+    
+        # Add test data and anomaly scores
+        fig.add_trace(go.Scatter(x=list(range(len(test_data))),
+                                 y=test_data,
+                                 mode='lines',
+                                 name='Test Data',
+                                 line=dict(color='blue')))
+        fig.add_trace(go.Scatter(x=list(range(len(anomaly_scores))),
+                                 y=anomaly_scores,
+                                 mode='lines',
+                                 name='Anomaly Scores',
+                                 line=dict(color='red')))
+    
+        # Highlight true anomalies (Y_labels)
+        if self.Y_labels is not None:
+            true_anomaly_indices = [i for i, label in enumerate(Y_labels) if label == 1]
+            if true_anomaly_indices:
+                fig.add_trace(go.Scatter(x=true_anomaly_indices,
+                                         y=[test_data[i] for i in true_anomaly_indices],
+                                         mode='markers',
+                                         name='True Anomalies (Y_labels)',
+                                         marker=dict(color='orange', size=10)))
+    
+        # Highlight predicted anomalies (threshold-based)
+        if threshold is not None:
+            predicted_anomalies = [i for i, score in enumerate(anomaly_scores) if score > threshold]
+            if predicted_anomalies:
+                fig.add_trace(go.Scatter(x=predicted_anomalies,
+                                         y=[test_data[i] for i in predicted_anomalies],
+                                         mode='markers',
+                                         name='Predicted Anomalies',
+                                         marker=dict(color='green', size=10)))
+    
+        # Highlight internal labels
+        if self.labels is not None:
+            label_indices = [i for i, label in enumerate(labels) if label == 1]
+            if label_indices:
+                fig.add_trace(go.Scatter(x=label_indices,
+                                         y=[test_data[i] for i in label_indices],
+                                         mode='markers',
+                                         name='Internal Labels',
+                                         marker=dict(color='purple', size=10)))
+    
+        # Set layout
+        fig.update_layout(title='Test Data, Anomaly Scores, and Anomalies',
+                          xaxis_title='Time Steps',
+                          yaxis_title='Value',
+                          legend=dict(x=0, y=1, traceorder='normal', orientation='h'),
+                          template='plotly',
+                          width=plot_width)
+    
+        # Show the figure
+        fig.show()
+
 
 #use knn
 

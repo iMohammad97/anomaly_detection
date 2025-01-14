@@ -74,7 +74,7 @@ class VariationalLSTMAutoencoder:
 
     def compute_threshold(self):
 
-        rec = self.model.predict(self.train_data_window, verbose=0)
+        rec = self.model.predict(self.train_data_window, verbose=0)[0]
         mse = np.mean(np.square(self.train_data_window - rec), axis=(1, 2))
         self.threshold = np.mean(mse) + self.threshold_sigma * np.std(mse)
 
@@ -144,7 +144,7 @@ class VariationalLSTMAutoencoder:
         length = self.test_data.shape[0]
         self.compute_threshold()
         # Generate predictions for the test data windows
-        self.predictions_windows = self.model.predict(self.test_data_window, batch_size=batch_size)
+        self.predictions_windows = self.model.predict(self.test_data_window, batch_size=batch_size)[0]
         mse = np.mean(np.square(self.test_data_window - self.predictions_windows), axis=(1, 2))
         # Expand errors to original length
         M = mse.shape[0]
