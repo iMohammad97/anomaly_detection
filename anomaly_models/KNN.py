@@ -21,6 +21,7 @@ class TimeSeriesAnomalyDetectorKNN:
         self.test_data_matrix = None
         self.y_anomaly = None
         self.metric = metric
+        
 
     def transform_to_matrix(self, time_series):
         if len(time_series) < self.window_length:
@@ -102,7 +103,7 @@ class TimeSeriesAnomalyDetectorKNN:
         # Step 4: Average scores for overlapping windows
         counts[counts == 0] = 1  # Avoid division by zero
         timestep_errors /= counts  # Average overlapping window scores
-
+        self.y_anomaly = pd.Series(timestep_errors)
         # Step 5: Return per-timestep anomaly scores as a pandas Series
         return pd.Series(timestep_errors)
     
