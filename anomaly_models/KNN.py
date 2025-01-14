@@ -42,7 +42,7 @@ class TimeSeriesAnomalyDetectorKNN:
         return None
 
 
-    def test_func(self, is_threshold=False, batch_size=100, threads=4):
+    def test_func(self, compute_threshold=False, batch_size=100, threads=4):
         """
         Process the test or train data in batches, using multi-threading for each batch.
     
@@ -51,7 +51,7 @@ class TimeSeriesAnomalyDetectorKNN:
         :param threads: Number of threads to use for parallel processing.
         """
         # Select data
-        if is_threshold:
+        if compute_threshold:
             data = self.train_data_matrix
         else:
             flattened_test = self.test_data.flatten()
@@ -72,21 +72,25 @@ class TimeSeriesAnomalyDetectorKNN:
             # Return batch scores
             return np.sum(np.sort(distance_matrix, axis=1)[:, :self.k], axis=1)
     
-        # Multi-threaded batch processing
+        
+            # Multi-threaded batch processing
         with ThreadPoolExecutor(max_workers=threads) as executor:
-            # Submit each batch to the thread pool
+            # Submit each batch to the thread pool, keeping track of batch indices
             futures = []
             for batch_idx in range(n_batches):
                 start_idx = batch_idx * batch_size
                 end_idx = min((batch_idx + 1) * batch_size, n_test)
-                futures.append(executor.submit(process_batch, start_idx, end_idx))
-    
-            # Collect results
-            for future in futures:
-                all_scores.append(future.result())
-    
-        # Concatenate all scores
-        return np.concatenate(all_scores)
+                future = executor.submit(process_batch, start_idx, end_idx)
+                futures.append((batch_idx, future))
+            
+            # Collect results in order
+            results = [None] * n_batches  # Pre-allocate list for ordered results
+            for batch_idx, future in futures:
+                results[batch_idx] = future.result()
+        
+        # Concatenate all scores in the correct order
+        all_scores = np.concatenate(results)
+        return all_scores
 
 
     def calc_anomaly(self, mode='expanding'):
@@ -126,14 +130,14 @@ class TimeSeriesAnomalyDetectorKNN:
         return pd.Series(timestep_errors)
     
     
-    def calculate_cosine_distances(self):
+    def calculate_cosine_distances(self,test, training_data):
         # Normalize training data
-        train_norms = np.linalg.norm(self.training_data, axis=1, keepdims=True)
-        train_normalized = self.training_data / train_norms  # Shape: (n_train, d)
+        train_norms = np.linalg.norm(training_data, axis=1, keepdims=True)
+        train_normalized = training_data / train_norms  # Shape: (n_train, d)
     
         # Normalize test data
-        test_norms = np.linalg.norm(self.test_data, axis=1, keepdims=True)
-        test_normalized = self.test_data / test_norms  # Shape: (n_test, d)
+        test_norms = np.linalg.norm(test, axis=1, keepdims=True)
+        test_normalized = test / test_norms  # Shape: (n_test, d)
     
         # Batch compute cosine similarity (dot product of normalized vectors)
         similarity_matrix = np.dot(test_normalized, train_normalized.T)  # Shape: (n_test, n_train)
@@ -143,9 +147,9 @@ class TimeSeriesAnomalyDetectorKNN:
     
         return distance_matrix
 
-    def calculate_mahalanobis_distances(self, inv_covmat):
+    def calculate_mahalanobis_distances(self,test, training_data, inv_covmat):
         # Compute differences between test and train batches
-        diff = self.test_data[:, np.newaxis, :] - self.training_data[np.newaxis, :, :]  # Shape: (n_test, n_train, d)
+        diff = test[:, np.newaxis, :] - training_data[np.newaxis, :, :]  # Shape: (n_test, n_train, d)
     
         # Batch apply Mahalanobis formula
         left_term = np.einsum('ijk,kl->ijl', diff, inv_covmat)  # Shape: (n_test, n_train, d)
