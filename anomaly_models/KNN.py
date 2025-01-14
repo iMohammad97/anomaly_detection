@@ -48,7 +48,6 @@ class TimeSeriesAnomalyDetectorKNN:
         # Compute the threshold based on the specified quantile
         self.threshold = np.quantile(anomaly_scores, 0.95)
         
-        logging.info(f"Calculated threshold: {threshold}")
         return None
 
 
