@@ -131,12 +131,6 @@ class TimeSeriesAnomalyDetectorKNN:
         return np.sqrt(mahalanobis_distance_squared)  # Shape: (n_test, n_train)
 
     def calculate_anomaly_threshold(self, quantile=0.95):
-        """
-        Calculate anomaly threshold based on training data.
-        
-        :param quantile: The quantile to use for the threshold. Defaults to 0.95.
-        :return: Threshold value for anomaly detection.
-        """
         logging.info("Calculating anomaly threshold from training data.")
         
         self.train_func(self.training_data, self.training_data)
@@ -149,6 +143,41 @@ class TimeSeriesAnomalyDetectorKNN:
         
         logging.info(f"Calculated threshold: {threshold}")
         return threshold
+
+
+    def save_state(self, file_path: str):
+        state = {
+            'training_data': self.training_data.tolist() if self.training_data is not None else None,
+            'test_data': self.test_data.tolist() if self.test_data is not None else None,
+            'labels': self.labels.tolist() if self.labels is not None else None,
+            'window_length': self.window_length,
+            'step_period': self.step_period,
+            'k': self.k,
+            'dim': self.dim,
+            'metric': self.metric,
+            'anomaly_scores': self.y_anomaly.tolist() if self.y_anomaly is not None else None
+        }
+
+        with open(file_path, 'w') as file:
+            json.dump(state, file)
+        print(f"State saved to {file_path}")
+
+    def load_state(self, file_path: str):
+        with open(file_path, 'r') as file:
+            state = json.load(file)
+
+        # Restore attributes
+        self.training_data = np.array(state['training_data']) if state['training_data'] is not None else None
+        self.test_data = np.array(state['test_data']) if state['test_data'] is not None else None
+        self.labels = np.array(state['labels']) if state['labels'] is not None else None
+        self.window_length = state['window_length']
+        self.step_period = state['step_period']
+        self.k = state['k']
+        self.dim = state['dim']
+        self.metric = state['metric']
+        self.y_anomaly = np.array(state['anomaly_scores']) if state['anomaly_scores'] is not None else None
+
+        print(f"State loaded from {file_path}")
 
 #use knn
 
