@@ -32,6 +32,7 @@ class USAD(nn.Module):
 			nn.Linear(self.n_hidden, self.n), nn.Sigmoid(),
 		)
 		self.device = device
+		self.to(device)
 		self.optimizer = torch.optim.AdamW(self.parameters() , lr=self.lr, weight_decay=1e-5)
 		self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, 5, 0.9)
 		self.losses1, self.losses2 = [], []
