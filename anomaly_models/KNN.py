@@ -205,8 +205,8 @@ class TimeSeriesAnomalyDetectorKNN:
     def plot_results(self,size=800):
         # Flattening arrays to ensure they are 1D
         test_data = self.test_data.ravel()  # Convert to 1D array
-        anomaly_preds = self.anomaly_preds  # Already 1D
-        anomaly_errors = (self.anomaly_preds  > self.threshold).astype(int)
+        anomaly_errors = self.anomaly_errors  # Already 1D
+        anomaly_preds = (self.anomaly_errors  > self.threshold).astype(int)
         labels = self.labels.ravel()  # Convert to 1D array
     
         # Check if all inputs have the same length
