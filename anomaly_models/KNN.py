@@ -43,6 +43,12 @@ class TimeSeriesAnomalyDetectorKNN:
         if len(flattened_train) < self.window_length:
             raise ValueError(f"Training data length ({len(flattened_train)}) must be greater than or equal to the window length ({self.window_length}).")
         self.train_data_matrix = self.transform_to_matrix(flattened_train)
+        anomaly_scores = self.test_func(True)
+        
+        # Compute the threshold based on the specified quantile
+        self.threshold = np.quantile(anomaly_scores, quantile)
+        
+        logging.info(f"Calculated threshold: {threshold}")
         return None
 
 
@@ -161,19 +167,6 @@ class TimeSeriesAnomalyDetectorKNN:
     
         return np.sqrt(mahalanobis_distance_squared)  # Shape: (n_test, n_train)
 
-    def calculate_anomaly_threshold(self, quantile=0.95):
-        logging.info("Calculating anomaly threshold from training data.")
-        
-        self.train_func()
-        
-        # Compute anomaly scores for training data
-        anomaly_scores = self.test_func(True)
-        
-        # Compute the threshold based on the specified quantile
-        self.threshold = np.quantile(anomaly_scores, quantile)
-        
-        logging.info(f"Calculated threshold: {threshold}")
-        return None
 
 
     def save_state(self, file_path: str):
