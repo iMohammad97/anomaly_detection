@@ -41,11 +41,13 @@ class TimeSeriesAnomalyDetectorKNN:
 
     def test_func(self, is_threshold=false, batch_size=100):
         if is_threshold:
-            
-        flattened_test = self.test_data.flatten()
-        self.test_data_matrix = self.transform_to_matrix(flattened_test)
+            data = self.train_data_matrix
+        else
+            flattened_test = self.test_data.flatten()
+            self.test_data_matrix = self.transform_to_matrix(flattened_test)
+            data = self.test_data_matrix
     
-        n_test = self.test_data_matrix.shape[0]
+        n_test = data.shape[0]
         n_batches = (n_test + batch_size - 1) // batch_size  # Compute number of batches
         all_scores = []
     
@@ -53,7 +55,7 @@ class TimeSeriesAnomalyDetectorKNN:
             # Select a batch of test windows
             start_idx = batch_idx * batch_size
             end_idx = min((batch_idx + 1) * batch_size, n_test)
-            batch = self.test_data_matrix[start_idx:end_idx]
+            batch = data[start_idx:end_idx]
     
             # Compute distances for the batch
             if self.metric == 'cosine':
