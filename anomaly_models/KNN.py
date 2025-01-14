@@ -32,15 +32,15 @@ class TimeSeriesAnomalyDetectorKNN:
             matrix[i, :] = time_series[i:i + self.window_length]
         return matrix
 
-    def train_func(self, X_train, y_train):
-        flattened_train = X_train.flatten()
+    def train_func(self):
+        flattened_train = self.training_data.flatten()
         if len(flattened_train) < self.window_length:
             raise ValueError(f"Training data length ({len(flattened_train)}) must be greater than or equal to the window length ({self.window_length}).")
         self.training_data = self.transform_to_matrix(flattened_train)
         return None
 
-    def test_func(self, X_test, batch_size=100):
-        flattened_test = X_test.flatten()
+    def test_func(self, batch_size=100):
+        flattened_test = self.test_data.flatten()
         self.test_data = self.transform_to_matrix(flattened_test)
     
         n_test = self.test_data.shape[0]
@@ -104,14 +104,14 @@ class TimeSeriesAnomalyDetectorKNN:
     
     
 
-    def calculate_cosine_distances(self, test_data, train_data):
+    def calculate_cosine_distances(self):
         # Normalize training data
-        train_norms = np.linalg.norm(train_data, axis=1, keepdims=True)
-        train_normalized = train_data / train_norms  # Shape: (n_train, d)
+        train_norms = np.linalg.norm(self.training_data, axis=1, keepdims=True)
+        train_normalized = self.training_data / train_norms  # Shape: (n_train, d)
     
         # Normalize test data
-        test_norms = np.linalg.norm(test_data, axis=1, keepdims=True)
-        test_normalized = test_data / test_norms  # Shape: (n_test, d)
+        test_norms = np.linalg.norm(self.test_data, axis=1, keepdims=True)
+        test_normalized = self.test_data / test_norms  # Shape: (n_test, d)
     
         # Batch compute cosine similarity (dot product of normalized vectors)
         similarity_matrix = np.dot(test_normalized, train_normalized.T)  # Shape: (n_test, n_train)
@@ -121,9 +121,9 @@ class TimeSeriesAnomalyDetectorKNN:
     
         return distance_matrix
 
-    def calculate_mahalanobis_distances(self, test_data, train_data, inv_covmat):
+    def calculate_mahalanobis_distances(self, inv_covmat):
         # Compute differences between test and train batches
-        diff = test_data[:, np.newaxis, :] - train_data[np.newaxis, :, :]  # Shape: (n_test, n_train, d)
+        diff = self.test_data[:, np.newaxis, :] - self.training_data[np.newaxis, :, :]  # Shape: (n_test, n_train, d)
     
         # Batch apply Mahalanobis formula
         left_term = np.einsum('ijk,kl->ijl', diff, inv_covmat)  # Shape: (n_test, n_train, d)
