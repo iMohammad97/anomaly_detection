@@ -66,9 +66,9 @@ class TimeSeriesAnomalyDetectorKNN:
         def process_batch(start_idx, end_idx):
             batch = data[start_idx:end_idx]
             if self.metric == 'cosine':
-                distance_matrix = self.calculate_cosine_distances(batch, self.training_data)
+                distance_matrix = self.calculate_cosine_distances(batch, self.train_data_matrix)
             elif self.metric == 'mahalanobis':
-                distance_matrix = self.calculate_mahalanobis_distances(batch, self.training_data, self.sigma)
+                distance_matrix = self.calculate_mahalanobis_distances(batch, self.train_data_matrix, self.sigma)
             # Return batch scores
             return np.sum(np.sort(distance_matrix, axis=1)[:, :self.k], axis=1)
     
