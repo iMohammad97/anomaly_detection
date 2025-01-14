@@ -59,9 +59,9 @@ class TimeSeriesAnomalyDetectorKNN:
     
             # Compute distances for the batch
             if self.metric == 'cosine':
-                distance_matrix = self.calculate_cosine_distances(batch, self.training_data)
+                distance_matrix = self.calculate_cosine_distances(batch)
             elif self.metric == 'mahalanobis':
-                distance_matrix = self.calculate_mahalanobis_distances(batch, self.training_data, self.sigma)
+                distance_matrix = self.calculate_mahalanobis_distances(batch, self.sigma)
     
             # Sum the k smallest distances for each test sample in the batch
             batch_scores = np.sum(np.sort(distance_matrix, axis=1)[:, :self.k], axis=1)
@@ -107,7 +107,6 @@ class TimeSeriesAnomalyDetectorKNN:
         return pd.Series(timestep_errors)
     
     
-
     def calculate_cosine_distances(self):
         # Normalize training data
         train_norms = np.linalg.norm(self.training_data, axis=1, keepdims=True)
