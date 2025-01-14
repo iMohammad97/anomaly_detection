@@ -74,7 +74,7 @@ class VariationalLSTMAutoencoder:
 
     def compute_threshold(self):
 
-        rec = self.model.predict(self.train_data_window, verbose=0)
+        rec = self.model.predict(self.train_data_window, verbose=0)[0]
         mse = np.mean(np.square(self.train_data_window - rec), axis=(1, 2))
         self.threshold = np.mean(mse) + self.threshold_sigma * np.std(mse)
 
