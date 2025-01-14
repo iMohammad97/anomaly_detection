@@ -3,11 +3,11 @@ import torch.nn as nn
 from tqdm.notebook import tqdm, trange
 import numpy as np
 
-class DAE(nn.Module):
+class SAE(nn.Module):
     def __init__(self, n_features: int = 1, window_size: int = 256, latent_dim: int = 32, lstm_units: int = 64,
                  mean_coef: float = 1, std_coef: float = 1, device: str = 'cpu'):
-        super(DAE, self).__init__()
-        self.name = 'DAE'
+        super(SAE, self).__init__()
+        self.name = 'SAE'
         self.lr = 0.0001
         self.device = device
         self.n_features = n_features

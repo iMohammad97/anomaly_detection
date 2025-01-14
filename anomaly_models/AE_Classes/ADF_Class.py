@@ -49,7 +49,7 @@ class AugmentedDickeyFullerLSTMAutoencoder:
         self.labels = labels
         self.name = 'LSTM_VAE'
         self.losses = {'mse': [], 'adf': []}
-
+        self._build_model()  # Build the model
     
     def _build_model(self):
         # Encoder
@@ -69,16 +69,13 @@ class AugmentedDickeyFullerLSTMAutoencoder:
     
         # ADF-LSTM Model
         self.model = models.Model(inputs, outputs)
-        return self.model
-    
+
     def train(self, batch_size: int = 32, epochs: int = 50, optimizer: str = 'adam', patience: int = 5):
         # Ensure the optimizer is set up correctly
         if isinstance(optimizer, str):
             optimizer = tf.keras.optimizers.get(optimizer)  # Get optimizer by name
         elif not isinstance(optimizer, tf.keras.optimizers.Optimizer):
             raise ValueError("Optimizer must be a string or a tf.keras.optimizers.Optimizer instance.")
-    
-        self._build_model()  # Build the model
     
         # Loss function
         mse_loss_fn = tf.keras.losses.MeanSquaredError()

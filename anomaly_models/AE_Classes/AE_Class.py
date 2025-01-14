@@ -29,6 +29,7 @@ class LSTMAutoencoder:
         self.labels = labels
         self.name = 'LSTMAutoencoder'  # Add a name attribute to the class
         self.losses = {'train': [], 'valid': []}
+        self._build_model()
 
     def _build_model(self):
         inputs = tf.keras.Input(shape=(self.timesteps, self.features), name='input_layer')
@@ -43,17 +44,12 @@ class LSTMAutoencoder:
 
         self.model = models.Model(inputs, outputs, name='model')
 
-        return self.model
-
     def compute_threshold(self):
         rec = self.model.predict(self.train_data_window, verbose=0)
         mse = np.mean(np.square(self.train_data_window - rec), axis=(1, 2))
         self.threshold = np.mean(mse) + self.threshold_sigma * np.std(mse)
 
     def train(self, batch_size=32, epochs=50, optimizer='adam', loss='mse', patience=10):
-        # Ensure the model is built before training
-        self.model = self._build_model()
-
         # Compile the model with the specified optimizer and loss function
         self.model.compile(optimizer=optimizer, loss=loss)
 

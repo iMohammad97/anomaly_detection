@@ -31,6 +31,7 @@ class VariationalLSTMAutoencoder:
         self.labels = labels
         self.name = 'LSTM_VAE'
         self.losses = {'mse': [], 'kld': []}
+        self._build_model()  # Build the model
 
     def _build_model(self):
         class Sampling(layers.Layer):
@@ -70,7 +71,6 @@ class VariationalLSTMAutoencoder:
 
         # VAE Model
         self.model = models.Model(inputs, [outputs, kl_loss])  # Return both outputs and KL loss
-        return self.model
 
     def compute_threshold(self):
 
@@ -84,8 +84,6 @@ class VariationalLSTMAutoencoder:
             optimizer = tf.keras.optimizers.get(optimizer)  # Get optimizer by name
         elif not isinstance(optimizer, tf.keras.optimizers.Optimizer):
             raise ValueError("Optimizer must be a string or a tf.keras.optimizers.Optimizer instance.")
-
-        self._build_model()  # Build the model
 
         # Loss function
         mse_loss_fn = tf.keras.losses.MeanSquaredError()
