@@ -146,7 +146,7 @@ class VariationalLSTMAutoencoder:
         length = self.test_data.shape[0]
         self.compute_threshold()
         # Generate predictions for the test data windows
-        self.predictions_windows = self.model.predict(self.test_data_window, batch_size=batch_size)
+        self.predictions_windows = self.model.predict(self.test_data_window, batch_size=batch_size)[0]
         mse = np.mean(np.square(self.test_data_window - self.predictions_windows), axis=(1, 2))
         # Expand errors to original length
         M = mse.shape[0]
