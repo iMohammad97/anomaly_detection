@@ -42,7 +42,7 @@ class TimeSeriesAnomalyDetectorKNN:
     def test_func(self, is_threshold=false, batch_size=100):
         if is_threshold:
             data = self.train_data_matrix
-        else
+        else:
             flattened_test = self.test_data.flatten()
             self.test_data_matrix = self.transform_to_matrix(flattened_test)
             data = self.test_data_matrix
