@@ -69,7 +69,7 @@ class TimeSeriesAnomalyDetectorKNN:
     def calc_anomaly(self, mode='expanding'):
         self.train_func()
         self.y_anomaly = np.zeros(self.window_length-1)
-        self.y_anomaly = np.append(self.y_anomaly, self.test_func(self.test_data))
+        self.y_anomaly = np.append(self.y_anomaly, self.test_func())
         return pd.Series(self.y_anomaly)
 
 
@@ -80,7 +80,7 @@ class TimeSeriesAnomalyDetectorKNN:
         self.train_func()
 
         # Step 1: Compute anomaly scores for all windows
-        anomaly_scores = self.test_func(self.test_data)
+        anomaly_scores = self.test_func()
 
         # Step 2: Initialize arrays to store per-timestep errors and counts
         length = len(self.test_data)
@@ -137,7 +137,7 @@ class TimeSeriesAnomalyDetectorKNN:
         self.train_func()
         
         # Compute anomaly scores for training data
-        anomaly_scores = self.test_func(self.training_data)
+        anomaly_scores = self.test_func()
         
         # Compute the threshold based on the specified quantile
         threshold = np.quantile(anomaly_scores, quantile)
