@@ -156,7 +156,7 @@ class LSTMAutoencoder:
         :param label_path: Path to a file containing the labels (e.g., .npy).
         """
         # 1. Load the model
-        self.model = tf.keras.models.load_model(model_path)
+        self.model = models.load_model(model_path)
 
         # 2. Load data
         self.train_data = np.load(train_path)
