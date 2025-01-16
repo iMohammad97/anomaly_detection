@@ -163,7 +163,7 @@ class LSTMAutoencoder:
 
         # 1. Load the model
         self.model = models.load_model(
-            'model_path.h5',
+            model_path,
             custom_objects={'mse': mse}
         )
 
