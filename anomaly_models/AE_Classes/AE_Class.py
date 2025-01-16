@@ -157,14 +157,19 @@ class LSTMAutoencoder:
         :param label_path: Path to a file containing the labels (e.g., .npy).
         """
 
-        @tf.keras.saving.register_keras_serializable()  # <= important decorator
-        def mse(y_true, y_pred):
-            return tf.reduce_mean(tf.square(y_true - y_pred))
 
         # 1. Load the model
         self.model = models.load_model(
             model_path,
-            custom_objects={'mse': mse}
+            compile=False
+        )
+
+
+        # If you DO need to compile for evaluation or re-training, do so in Python:
+        self.model.compile(
+            optimizer = 'adam',
+            loss = 'mean_squared_error',
+            metrics = ['mean_squared_error']
         )
 
         # 2. Load data
