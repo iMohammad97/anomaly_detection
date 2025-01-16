@@ -6,7 +6,7 @@ import numpy as np
 import tensorflow as tf
 import plotly.graph_objects as go
 import json
-from tensorflow import keras
+
 
 
 class LSTMAutoencoder:
@@ -157,7 +157,7 @@ class LSTMAutoencoder:
         :param label_path: Path to a file containing the labels (e.g., .npy).
         """
 
-        @keras.saving.register_keras_serializable()  # <= important decorator
+        @tf.keras.saving.register_keras_serializable()  # <= important decorator
         def mse(y_true, y_pred):
             return tf.reduce_mean(tf.square(y_true - y_pred))
 
