@@ -178,8 +178,8 @@ class LSTMAutoencoder:
         self.labels = np.load(label_path)
 
         # 3. Recreate the windows with the newly loaded data
-        self.train_data_window = create_windows(self.train_data, self.timesteps, self.step_size)
-        self.test_data_window = create_windows(self.test_data, self.timesteps, 1)
+        self.train_data_window = create_windows(self.train_data, self.timesteps)
+        self.test_data_window = create_windows(self.test_data, self.timesteps)
 
         # 4. Evaluate the model on the newly loaded data
         #    This will populate self.threshold, self.predictions_windows, self.anomaly_preds, etc.
