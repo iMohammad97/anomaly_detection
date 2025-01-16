@@ -116,7 +116,7 @@ class LSTMAutoencoder:
         latent_representations = encoder_model.predict(x)
         return latent_representations
 
-    def save_state(self, file_path: str, model_path: str = "model.h5"):
+    def save_model(self, file_path: str, model_path: str = "model.h5"):
         """Save the state of the object and the Keras model."""
         # Save the Keras model
         if self.model is not None:
@@ -126,42 +126,51 @@ class LSTMAutoencoder:
             print("No model to save.")
 
         # Save the rest of the attributes
-        state = {
-            'train_data': self.train_data.tolist(),
-            'test_data': self.test_data.tolist(),
-            'labels': self.labels.tolist(),
-            'timesteps': self.timesteps,
-            'features': self.features,
-            'latent_dim': self.latent_dim,
-            'lstm_units': self.lstm_units,
-            'threshold': self.threshold,
-            'predictions_windows': self.predictions_windows.tolist(),
-            'anomaly_preds': self.anomaly_preds.tolist(),
-            'anomaly_errors': self.anomaly_errors.tolist(),
-            'predictions': self.predictions.tolist(),
-            'losses': self.losses,
-            'model_path': model_path  # Save the model path for loading later
-        }
-        with open(file_path, 'w') as file:
-            json.dump(state, file)
-        print(f"State saved to {file_path}")
+        # state = {
+        #     'train_data': self.train_data.tolist(),
+        #     'test_data': self.test_data.tolist(),
+        #     'labels': self.labels.tolist(),
+        #     'timesteps': self.timesteps,
+        #     'features': self.features,
+        #     'latent_dim': self.latent_dim,
+        #     'lstm_units': self.lstm_units,
+        #     'threshold': self.threshold,
+        #     'predictions_windows': self.predictions_windows.tolist(),
+        #     'anomaly_preds': self.anomaly_preds.tolist(),
+        #     'anomaly_errors': self.anomaly_errors.tolist(),
+        #     'predictions': self.predictions.tolist(),
+        #     'losses': self.losses,
+        #     'model_path': model_path  # Save the model path for loading later
+        # }
+        # with open(file_path, 'w') as file:
+        #     json.dump(state, file)
+        # print(f"State saved to {file_path}")
 
-    def load_state(self, file_path: str):
-        """Load the state of the object and the Keras model."""
-        with open(file_path, 'r') as file:
-            state = json.load(file)
+    def load_model(self, model_path: str, train_path: str, test_path: str, label_path: str):
+        """
+        Load the Keras model from the specified file paths and evaluate it.
+    
+        :param model_path: Path to the saved Keras .h5 (or SavedModel) file.
+        :param train_path: Path to a file containing the training data (e.g., .npy).
+        :param test_path: Path to a file containing the test data (e.g., .npy).
+        :param label_path: Path to a file containing the labels (e.g., .npy).
+        """
+        # 1. Load the model
+        self.model = tf.keras.models.load_model(model_path)
 
-        # Restore the attributes
-        self.train_data = np.array(state['train_data'])
-        self.test_data = np.array(state['test_data'])
-        self.labels = np.array(state['labels'])
-        self.timesteps = state['timesteps']
-        self.features = state['features']
-        self.latent_dim = state['latent_dim']
-        self.lstm_units = state['lstm_units']
-        self.threshold = state['threshold']
-        self.predictions_windows = np.array(state['predictions_windows'])
-        self.losses = state['losses']
+        # 2. Load data
+        self.train_data = np.load(train_path)
+        self.test_data = np.load(test_path)
+        self.labels = np.load(label_path)
+
+        # 3. Recreate the windows with the newly loaded data
+        self.train_data_window = create_windows(self.train_data, self.timesteps, self.step_size)
+        self.test_data_window = create_windows(self.test_data, self.timesteps, 1)
+
+        # 4. Evaluate the model on the newly loaded data
+        #    This will populate self.threshold, self.predictions_windows, self.anomaly_preds, etc.
+        self.evaluate()
+
 
     def plot_results(self,size=800):
         # Flattening arrays to ensure they are 1D
