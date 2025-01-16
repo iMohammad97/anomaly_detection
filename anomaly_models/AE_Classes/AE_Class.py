@@ -8,9 +8,6 @@ import plotly.graph_objects as go
 import json
 from tensorflow import keras
 
-@keras.saving.register_keras_serializable()  # <= important decorator
-def mse(y_true, y_pred):
-    return tf.reduce_mean(tf.square(y_true - y_pred))
 
 class LSTMAutoencoder:
     def __init__(self, train_data, test_data, labels, timesteps: int = 128, features: int = 1, latent_dim: int = 32,
@@ -159,6 +156,10 @@ class LSTMAutoencoder:
         :param test_path: Path to a file containing the test data (e.g., .npy).
         :param label_path: Path to a file containing the labels (e.g., .npy).
         """
+
+        @keras.saving.register_keras_serializable()  # <= important decorator
+        def mse(y_true, y_pred):
+            return tf.reduce_mean(tf.square(y_true - y_pred))
 
         # 1. Load the model
         self.model = models.load_model(
