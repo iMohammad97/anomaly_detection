@@ -125,27 +125,7 @@ class LSTMAutoencoder:
             print(f"Model saved to {model_path}")
         else:
             print("No model to save.")
-
-        # Save the rest of the attributes
-        # state = {
-        #     'train_data': self.train_data.tolist(),
-        #     'test_data': self.test_data.tolist(),
-        #     'labels': self.labels.tolist(),
-        #     'timesteps': self.timesteps,
-        #     'features': self.features,
-        #     'latent_dim': self.latent_dim,
-        #     'lstm_units': self.lstm_units,
-        #     'threshold': self.threshold,
-        #     'predictions_windows': self.predictions_windows.tolist(),
-        #     'anomaly_preds': self.anomaly_preds.tolist(),
-        #     'anomaly_errors': self.anomaly_errors.tolist(),
-        #     'predictions': self.predictions.tolist(),
-        #     'losses': self.losses,
-        #     'model_path': model_path  # Save the model path for loading later
-        # }
-        # with open(file_path, 'w') as file:
-        #     json.dump(state, file)
-        # print(f"State saved to {file_path}")
+        # file_path is still taken in params for err prevention in running pipelines
 
     def load_model(self, model_path: str, train_path: str, test_path: str, label_path: str):
         """
@@ -158,31 +138,31 @@ class LSTMAutoencoder:
         """
 
 
-        # 1. Load the model
+        # Load the model
         self.model = models.load_model(
             model_path,
             compile=False
         )
 
 
-        # If you DO need to compile for evaluation or re-training, do so in Python:
+        # As we DO need to compile for evaluation or re-training
         self.model.compile(
             optimizer = 'adam',
             loss = 'mean_squared_error',
             metrics = ['mean_squared_error']
         )
 
-        # 2. Load data
+        # Load data
         self.train_data = np.load(train_path)
         self.test_data = np.load(test_path)
         self.labels = np.load(label_path)
 
-        # 3. Recreate the windows with the newly loaded data
+        # Recreate the windows with the newly loaded data
         self.train_data_window = create_windows(self.train_data, self.timesteps)
         self.test_data_window = create_windows(self.test_data, self.timesteps)
 
-        # 4. Evaluate the model on the newly loaded data
-        #    This will populate self.threshold, self.predictions_windows, self.anomaly_preds, etc.
+        # Evaluate the model on the newly loaded data
+        # This will populate self.threshold, self.predictions_windows, self.anomaly_preds, etc.
         self.evaluate()
 
 
