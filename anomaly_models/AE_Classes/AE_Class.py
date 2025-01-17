@@ -163,7 +163,7 @@ class LSTMAutoencoder:
 
         # Evaluate the model on the newly loaded data
         # This will populate self.threshold, self.predictions_windows, self.anomaly_preds, etc.
-        self.evaluate()
+        # self.evaluate()
 
 
     def plot_results(self,size=800):
