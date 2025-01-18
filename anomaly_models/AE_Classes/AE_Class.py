@@ -117,7 +117,7 @@ class LSTMAutoencoder:
         latent_representations = encoder_model.predict(x)
         return latent_representations
 
-    def save_model(self, file_path: str, model_path: str = "model.h5"):
+    def save_model(self, model_path: str = "model.h5"):
         """Save the state of the object and the Keras model."""
         # Save the Keras model
         if self.model is not None:
@@ -125,7 +125,6 @@ class LSTMAutoencoder:
             print(f"Model saved to {model_path}")
         else:
             print("No model to save.")
-        # file_path is still taken in params for err prevention in running pipelines
 
     def load_model(self, model_path: str, train_path: str, test_path: str, label_path: str):
         """

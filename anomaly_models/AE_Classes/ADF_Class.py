@@ -256,7 +256,7 @@ class AugmentedDickeyFullerLSTMAutoencoder:
         # Show the figure
         fig.show()
 
-    def save_state(self, file_path: str, model_path: str = "model.h5"):
+    def save_model(self, model_path: str = "model.h5"):
         """Save the state of the object and the Keras model."""
         # Save the Keras model
         if self.model is not None:
@@ -265,49 +265,10 @@ class AugmentedDickeyFullerLSTMAutoencoder:
         else:
             print("No model to save.")
 
-        # Save the rest of the attributes
-        state = {
-            'train_data': self.train_data.tolist(),
-            'test_data': self.test_data.tolist(),
-            'labels': self.labels.tolist(),
-            'timesteps': self.timesteps,
-            'features': self.features,
-            'latent_dim': self.latent_dim,
-            'lstm_units': self.lstm_units,
-            'threshold': self.threshold,
-            'predictions_windows': self.predictions_windows.tolist(),
-            'anomaly_preds': self.anomaly_preds.tolist(),
-            'anomaly_errors': self.anomaly_errors.tolist(),
-            'predictions': self.predictions.tolist(),
-            'losses': self.losses,
-            'model_path': model_path  # Save the model path for loading later
-        }
-        with open(file_path, 'w') as file:
-            json.dump(state, file)
-        print(f"State saved to {file_path}")
-
-    def load_state(self, file_path: str):
-        """Load the state of the object and the Keras model."""
-        with open(file_path, 'r') as file:
-            state = json.load(file)
-
-        # Restore the attributes
-        self.train_data = np.array(state['train_data'])
-        self.test_data = np.array(state['test_data'])
-        self.labels = np.array(state['labels'])
-        self.timesteps = state['timesteps']
-        self.features = state['features']
-        self.latent_dim = state['latent_dim']
-        self.lstm_units = state['lstm_units']
-        self.threshold = state['threshold']
-        self.predictions_windows = np.array(state['predictions_windows'])
-        self.anomaly_preds = np.array(state['anomaly_preds'])
-        self.anomaly_errors = np.array(state['anomaly_errors'])
-        self.predictions = np.array(state['predictions'])
-        self.losses = state['losses']
+    def load_model(self, model_path: str):
+        """Load the Keras model."""
 
         # Load the Keras model if a path is provided
-        model_path = state.get('model_path', None)
         if model_path and os.path.exists(model_path):
             self.model = tf.keras.models.load_model(model_path)
             print(f"Model loaded from {model_path}")
