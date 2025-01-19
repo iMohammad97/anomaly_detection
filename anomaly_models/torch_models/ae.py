@@ -110,9 +110,9 @@ class AE(nn.Module):
                           width=plot_width)
         fig.show()
 
-    def plot_losses(self):
-        n_epochs = len(self.losses)
-        xs = np.arange(n_epochs) + 1
+    def plot_losses(self, fig_size=(10, 6)):
+        xs = np.arange(len(self.losses)) + 1
+        plt.figure(figsize=fig_size)
         plt.plot(xs, self.losses, label='Total Loss')
         plt.grid()
         plt.xticks(xs)

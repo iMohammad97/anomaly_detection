@@ -3,6 +3,7 @@ from torch import nn
 import numpy as np
 from tqdm.notebook import tqdm, trange
 import plotly.graph_objects as go
+from matplotlib import pyplot as plt
 
 ## CAE-M Model (TKDE 21)
 class CAE_M(nn.Module):
@@ -51,7 +52,7 @@ class CAE_M(nn.Module):
             pbar.set_description(f'MSE = {np.mean(l1s):.4f}')
             self.losses.append(np.mean(l1s))
 
-    def predict(self, data, name: str = ''):
+    def predict(self, data):
         inputs, anomalies, outputs, errors = [], [], [], []
         mse = nn.MSELoss(reduction='none').to(self.device)
         for window, anomaly in data:
@@ -106,3 +107,45 @@ class CAE_M(nn.Module):
                           width=plot_width)
 
         fig.show()
+
+    def plot_losses(self, fig_size=(10, 6)):
+        xs = np.arange(len(self.losses)) + 1
+        plt.figure(figsize=fig_size)
+        plt.plot(xs, self.losses, label='Total Loss')
+        plt.grid()
+        plt.xticks(xs)
+        plt.legend()
+        plt.show()
+
+    def save(self, path: str = ''):
+        """
+        Save the model, optimizer state, and training history to a file.
+        """
+        if path == '':
+            path = self.name + '_' + str(len(self.losses)).zfill(3) + '.pth'
+        torch.save({
+            'model_state_dict': self.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'losses': self.losses,
+            'config': {
+                'feats': self.n_feats,
+                'window_size': self.window_size,
+                'device': self.device,
+            }
+        }, path)
+        print(f'Model saved to path = {path}')
+
+    @staticmethod
+    def load(path: str):
+        checkpoint = torch.load(path)
+        config = checkpoint['config']
+        model = CAE_M(
+            window_size=config['window_size'],
+            feats=config['feats'],
+            device=config['device']
+        )
+        model.load_state_dict(checkpoint['model_state_dict'])
+        model.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        model.losses = checkpoint['losses']
+
+        return model

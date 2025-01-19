@@ -140,9 +140,9 @@ class VAE(nn.Module):
 
         fig.show()
 
-    def plot_losses(self):
-        n_epochs = len(self.losses)
-        xs = np.arange(n_epochs) + 1
+    def plot_losses(self, fig_size=(10, 6)):
+        xs = np.arange(len(self.losses)) + 1
+        plt.figure(figsize=fig_size)
         plt.plot(xs, self.losses, label='Total Loss')
         plt.plot(xs, self.mse_losses, label='MSE Losses')
         plt.plot(xs, self.kld_losses, label='KLD Losses')
@@ -176,11 +176,7 @@ class VAE(nn.Module):
 
     @staticmethod
     def load(path: str, weights_only: bool = False):
-        """
-        Load a model, optimizer state, and training history from a file.
-        By default, uses `weights_only=True` for safety.
-        """
-        checkpoint = torch.load(path, weights_only=weights_only)  # Be cautious with untrusted files
+        checkpoint = torch.load(path, weights_only=weights_only)
         config = checkpoint['config']
         model = VAE(
             n_features=config['n_features'],

@@ -3,6 +3,7 @@ import torch.nn as nn
 from tqdm.notebook import tqdm, trange
 import numpy as np
 import plotly.graph_objects as go
+from matplotlib import pyplot as plt
 
 class SAE(nn.Module):
     def __init__(self, n_features: int = 1, window_size: int = 256, latent_dim: int = 32, lstm_units: int = 64,
@@ -29,6 +30,9 @@ class SAE(nn.Module):
 
         self.optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=1e-5)
         self.losses = []
+        self.recon_losses = []
+        self.mean_losses = []
+        self.std_losses = []
 
     def forward(self, x):
         # Encode
@@ -64,9 +68,10 @@ class SAE(nn.Module):
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
-            pbar.set_description(
-                f'Rec Loss = {np.mean(recons):.4f}, Avg Loss = {np.mean(means):.4f}, STD Loss = {np.mean(stds):.4f} ')
-            self.losses.append(loss.item())
+            rl, ml, sl = np.mean(recons), np.mean(means), np.mean(stds)
+            pbar.set_description(f'Rec Loss = {rl:.4f}, Avg Loss = {ml:.4f}, STD Loss = {sl:.4f} ')
+            self.recon_losses.append(rl), self.mean_losses.append(ml)
+            self.std_losses.append(sl), self.losses.append(rl + ml + sl)
 
     def predict(self, data, name: str = ''):
         inputs, anomalies, outputs, errors = [], [], [], []
@@ -132,6 +137,66 @@ class SAE(nn.Module):
 
         # Show the figure
         fig.show()
+
+    def plot_losses(self, fig_size=(10, 6)):
+        xs = np.arange(len(self.losses)) + 1
+        plt.figure(figsize=fig_size)
+        plt.plot(xs, self.losses, label='Total Loss')
+        plt.plot(xs, self.recon_losses, label='REC Losses')
+        plt.plot(xs, self.mean_losses, label='AVG Losses')
+        plt.plot(xs, self.std_losses, label='STD Losses')
+        plt.grid()
+        plt.xticks(xs)
+        plt.legend()
+        plt.show()
+
+    def save(self, path: str = ''):
+        """
+        Save the model, optimizer state, and training history to a file.
+        """
+        if path == '':
+            path = self.name + '_' + str(len(self.losses)).zfill(3) + '.pth'
+        torch.save({
+            'model_state_dict': self.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'losses': self.losses,
+            'recon_losses': self.recon_losses,
+            'mean_losses': self.mean_losses,
+            'std_losses': self.std_losses,
+            'config': {
+                'n_features': self.n_features,
+                'window_size': self.window_size,
+                'latent_dim': self.latent_dim,
+                'lstm_units': self.lstm_units,
+                'mean_coef': self.stationary_loss.mean_coef,
+                'std_coef': self.stationary_loss.std_coef,
+                'device': self.device,
+                'lr': self.lr,
+            }
+        }, path)
+        print(f'Model saved to path = {path}')
+
+    @staticmethod
+    def load(path: str, weights_only: bool = False):
+        checkpoint = torch.load(path, weights_only=weights_only)
+        config = checkpoint['config']
+        model = SAE(
+            n_features=config['n_features'],
+            window_size=config['window_size'],
+            latent_dim=config['latent_dim'],
+            lstm_units=config['lstm_units'],
+            mean_coef=config['mean_coef'],
+            std_coef=config['std_coef'],
+            device=config['device']
+        )
+        model.load_state_dict(checkpoint['model_state_dict'])
+        model.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        model.losses = checkpoint['losses']
+        model.recon_losses = checkpoint['recon_losses']
+        model.mean_losses = checkpoint['mean_losses']
+        model.std_losses = checkpoint['std_losses']
+
+        return model
 
 
 class StationaryLoss(nn.Module):

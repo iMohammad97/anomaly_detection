@@ -1,3 +1,22 @@
+# Torch Models
+Models in this package share similar methods and are all implemented using PyTorch.
+
+## Guide
+Here are some useful tips as to how you can work with these models:
+- To **train** a model, just use `model.learn(train_loader, n_epochs)`
+- To get the reconstructions use `model.predict(test_loader)`
+- To **plot** the reconstructions next to the original time series and the reconstruction losses use `model.plot_results(test_loader)`
+- To plot the training **losses** use `model.plot_losses()`
+- To **save** a model use `model.save(path)`
+- To **load** a model use `model = Model_Class.load(path)`
+
+In these examples `train_loader` and `test_loader` are PyTorch `DataLoader`s.
+The `plot_losses` method can also take a `fig_size` input which specifies the width and height of the plot.
+If you omit the `path` input for saving, the default path will be models name and the number of epochs you trained it for.
+
+**Warning**: Evidently google colab doesn't show plotly plots when you print something in the same cell. 
+If you don't see anything after calling `plot_results` for your model, try running it in a new empty cell.
+
 # List of (Working!) Models 
 
 ## DAGMM 
@@ -47,7 +66,7 @@ KDD 20
 sample usage:
 
 ```python
-from anomaly_models.torch_models import usad
+from anomaly_models.torch_models import USAD
 from utilities.torch_ucr import get_dataloaders
 
 # Dataset
@@ -82,6 +101,8 @@ model.plot_results(test_loader)
 
 ## AE
 
+sample usage:
+
 ```python
 from anomaly_models.torch_models import AE
 from utilities.torch_ucr import get_dataloaders
@@ -97,6 +118,8 @@ model.plot_results(test_loader)
 ```
 
 ## VAE
+
+sample usage:
 
 ```python
 from anomaly_models.torch_models import VAE

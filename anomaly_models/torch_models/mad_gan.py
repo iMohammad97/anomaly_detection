@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from tqdm.notebook import tqdm, trange
 import numpy as np
+from matplotlib import pyplot as plt
 import plotly.graph_objects as go
 
 # MAD_GAN (ICANN 19)
@@ -29,7 +30,9 @@ class MAD_GAN(nn.Module):
         )
         self.to(device)
         self.optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=1e-5)
-        self.losses = []
+        self.mse_losses = []
+        self.gls_losses = []
+        self.dls_losses = []
 
     def forward(self, g):
         ## Generate
@@ -64,8 +67,11 @@ class MAD_GAN(nn.Module):
                 self.discriminator.zero_grad()
                 self.optimizer.step()
                 mses.append(mse.item()), gls.append(gl.item()), dls.append(dl.item())
-            pbar.set_description(f'MSE = {np.mean(mses):.4f},\tG = {np.mean(gls):.4f},\tD = {np.mean(dls):.4f}')
-            self.losses.append(np.mean(gls) + np.mean(dls))
+            ml, gl, dl = np.mean(mses), np.mean(gls), np.mean(dls)
+            pbar.set_description(f'MSE = {ml:.4f},\tG = {gl:.4f},\tD = {dl:.4f}')
+            self.mse_losses.append(ml)
+            self.gls_losses.append(gl)
+            self.dls_losses.append(dl)
 
     # def predict(self, data):
     #     self.eval()
@@ -136,3 +142,49 @@ class MAD_GAN(nn.Module):
                           width=plot_width)
 
         fig.show()
+
+    def plot_losses(self, fig_size=(10, 6)):
+        xs = np.arange(len(self.mse_losses)) + 1
+        plt.figure(figsize=fig_size)
+        plt.plot(xs, self.mse_losses, label='Reconstruction Loss')
+        plt.plot(xs, self.gls_losses, label='Generation Loss')
+        plt.plot(xs, self.dls_losses, label='Discrimination Loss')
+        plt.grid()
+        plt.xticks(xs)
+        plt.legend()
+        plt.show()
+
+    def save(self, path: str = ''):
+        """
+        Save the model, optimizer state, and training history to a file.
+        """
+        if path == '':
+            path = self.name + '_' + str(len(self.losses)).zfill(3) + '.pth'
+        torch.save({
+            'model_state_dict': self.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'mse_losses': self.mse_losses,
+            'gls_losses': self.gls_losses,
+            'dls_losses': self.dls_losses,
+            'config': {
+                'feats': self.n_feats,
+                'device': self.device,
+            }
+        }, path)
+        print(f'Model saved to path = {path}')
+
+    @staticmethod
+    def load(path: str):
+        checkpoint = torch.load(path)
+        config = checkpoint['config']
+        model = MAD_GAN(
+            feats=config['feats'],
+            device=config['device']
+        )
+        model.load_state_dict(checkpoint['model_state_dict'])
+        model.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        model.mse_losses = checkpoint['mse_losses']
+        model.gls_losses = checkpoint['gls_losses']
+        model.dls_losses = checkpoint['dls_losses']
+
+        return model

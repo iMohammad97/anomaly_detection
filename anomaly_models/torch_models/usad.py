@@ -2,6 +2,7 @@ import torch
 from torch import nn
 import numpy as np
 import plotly.graph_objects as go
+from matplotlib import pyplot as plt
 from tqdm.notebook import tqdm, trange
 
 ## USAD Model (KDD 20)
@@ -123,3 +124,46 @@ class USAD(nn.Module):
 						  width=plot_width)
 
 		fig.show()
+
+	def plot_losses(self, fig_size=(10, 6)):
+		xs = np.arange(len(self.losses1)) + 1
+		plt.figure(figsize=fig_size)
+		plt.plot(xs, self.losses1, label='Loss 1')
+		plt.plot(xs, self.losses2, label='Loss 2')
+		plt.grid()
+		plt.xticks(xs)
+		plt.legend()
+		plt.show()
+
+	def save(self, path: str = ''):
+		"""
+        Save the model, optimizer state, and training history to a file.
+        """
+		if path == '':
+			path = self.name + '_' + str(len(self.losses)).zfill(3) + '.pth'
+		torch.save({
+			'model_state_dict': self.state_dict(),
+			'optimizer_state_dict': self.optimizer.state_dict(),
+			'losses1': self.losses1,
+			'losses2': self.losses2,
+			'config': {
+				'feats': self.n_feats,
+				'device': self.device,
+			}
+		}, path)
+		print(f'Model saved to path = {path}')
+
+	@staticmethod
+	def load(path: str):
+		checkpoint = torch.load(path)
+		config = checkpoint['config']
+		model = USAD(
+			feats=config['feats'],
+			device=config['device']
+		)
+		model.load_state_dict(checkpoint['model_state_dict'])
+		model.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+		model.losses1 = checkpoint['losses1']
+		model.losses2 = checkpoint['losses2']
+
+		return model
