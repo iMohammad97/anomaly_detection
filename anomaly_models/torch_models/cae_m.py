@@ -129,7 +129,7 @@ class CAE_M(nn.Module):
             'losses': self.losses,
             'config': {
                 'feats': self.n_feats,
-                'window_size': self.window_size,
+                'window_size': self.n_window,
                 'device': self.device,
             }
         }, path)
@@ -137,7 +137,7 @@ class CAE_M(nn.Module):
 
     @staticmethod
     def load(path: str):
-        checkpoint = torch.load(path)
+        checkpoint = torch.load(path, weights_only=False)
         config = checkpoint['config']
         model = CAE_M(
             window_size=config['window_size'],

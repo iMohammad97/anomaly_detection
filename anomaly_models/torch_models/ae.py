@@ -141,35 +141,18 @@ class AE(nn.Module):
         print(f'Model saved to path = {path}')
 
     @staticmethod
-    def load(path: str, weights_only: bool = True):
-        """
-        Load a model, optimizer state, and training history from a file.
-        By default, uses `weights_only=True` for safety.
-        """
-        if weights_only:
-            checkpoint = torch.load(path, weights_only=True)
-            config = checkpoint.get('config', {})
-            model = AE(
-                n_features=config.get('n_features', 1),
-                window_size=config.get('window_size', 256),
-                latent_dim=config.get('latent_dim', 32),
-                lstm_units=config.get('lstm_units', 64),
-                device=config.get('device', 'cpu')
-            )
-            model.load_state_dict(checkpoint['model_state_dict'])
-            model.losses = checkpoint.get('losses', [])
-        else:
-            checkpoint = torch.load(path)  # Be cautious with untrusted files
-            config = checkpoint['config']
-            model = AE(
-                n_features=config['n_features'],
-                window_size=config['window_size'],
-                latent_dim=config['latent_dim'],
-                lstm_units=config['lstm_units'],
-                device=config['device']
-            )
-            model.load_state_dict(checkpoint['model_state_dict'])
-            model.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            model.losses = checkpoint['losses']
+    def load(path: str):
+        checkpoint = torch.load(path, weights_only=False)
+        config = checkpoint['config']
+        model = AE(
+            n_features=config['n_features'],
+            window_size=config['window_size'],
+            latent_dim=config['latent_dim'],
+            lstm_units=config['lstm_units'],
+            device=config['device']
+        )
+        model.load_state_dict(checkpoint['model_state_dict'])
+        model.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        model.losses = checkpoint['losses']
 
         return model

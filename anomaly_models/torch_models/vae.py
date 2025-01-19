@@ -175,8 +175,8 @@ class VAE(nn.Module):
         print(f'Model saved to path = {path}')
 
     @staticmethod
-    def load(path: str, weights_only: bool = False):
-        checkpoint = torch.load(path, weights_only=weights_only)
+    def load(path: str):
+        checkpoint = torch.load(path, weights_only=False)
         config = checkpoint['config']
         model = VAE(
             n_features=config['n_features'],

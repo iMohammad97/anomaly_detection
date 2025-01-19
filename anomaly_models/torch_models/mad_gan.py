@@ -159,7 +159,7 @@ class MAD_GAN(nn.Module):
         Save the model, optimizer state, and training history to a file.
         """
         if path == '':
-            path = self.name + '_' + str(len(self.losses)).zfill(3) + '.pth'
+            path = self.name + '_' + str(len(self.mse_losses)).zfill(3) + '.pth'
         torch.save({
             'model_state_dict': self.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
@@ -175,7 +175,7 @@ class MAD_GAN(nn.Module):
 
     @staticmethod
     def load(path: str):
-        checkpoint = torch.load(path)
+        checkpoint = torch.load(path, weights_only=False)
         config = checkpoint['config']
         model = MAD_GAN(
             feats=config['feats'],
