@@ -7,6 +7,7 @@ import tensorflow as tf
 import plotly.graph_objects as go
 from matplotlib import pyplot as plt
 from tqdm.notebook import trange
+from tensorflow.keras.utils import custom_object_scope
 
 
 class StationaryLoss(layers.Layer):
@@ -203,34 +204,28 @@ class StationaryLSTMAutoencoder:
 
     
     def load_model(self, model_path: str, train_path: str, test_path: str, label_path: str):
-        
-        # Load the model
-        self.model = models.load_model(
-            model_path,
-            compile=False
-        )
-
-
-        # As we DO need to compile for evaluation or re-training
+        # Use custom_object_scope for the custom layer
+        with custom_object_scope({'StationaryLoss': StationaryLoss}):
+            self.model = models.load_model(
+                model_path,
+                compile=False  # Avoid recompiling until the model is fully loaded
+            )
+    
+        # Compile the model for evaluation or retraining
         self.model.compile(
-            optimizer = 'adam',
-            loss = 'mean_squared_error',
-            metrics = ['mean_squared_error']
+            optimizer='adam',
+            loss='mean_squared_error',
+            metrics=['mean_squared_error']
         )
-
+    
         # Load data
         self.train_data = np.load(train_path)
         self.test_data = np.load(test_path)
         self.labels = np.load(label_path)
-
+    
         # Recreate the windows with the newly loaded data
         self.train_data_window = create_windows(self.train_data, self.timesteps)
         self.test_data_window = create_windows(self.test_data, self.timesteps)
-
-        # Evaluate the model on the newly loaded data
-        # This will populate self.threshold, self.predictions_windows, self.anomaly_preds, etc.
-        # self.evaluate()
-
     
     def plot_results(self, size=800):
         # Flattening arrays to ensure they are 1D
