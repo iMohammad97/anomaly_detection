@@ -1,8 +1,10 @@
 import torch
 import torch.nn as nn
+from matplotlib import pyplot as plt
 from tqdm.notebook import tqdm, trange
 import numpy as np
 import plotly.graph_objects as go
+
 
 class AE(nn.Module):
     def __init__(self, n_features: int = 1, window_size: int = 256, latent_dim: int = 32, lstm_units: int = 64, device: str = 'cpu'):
@@ -56,23 +58,18 @@ class AE(nn.Module):
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
-            pbar.set_description(
-                f'MSE Loss = {np.mean(recons):.4f}')
+            pbar.set_description(f'MSE Loss = {np.mean(recons):.4f}')
             self.losses.append(np.mean(recons))
 
-    def predict(self, data, name: str = ''):
+    def predict(self, data):
         inputs, anomalies, outputs, errors = [], [], [], []
         mse = nn.MSELoss(reduction='none').to(self.device)
-        for window, anomaly in data:#tqdm(data, leave=False, desc=f'Predicting {name}'):
-            # Save the original data
+        for window, anomaly in data:
             inputs.append(window.squeeze().T[-1])
             anomalies.append(anomaly.squeeze().T[-1])
-            # Predict outputs
             window = window.to(self.device)
             recons = self.forward(window)
-            # Save outputs
             outputs.append(recons.cpu().detach().numpy().squeeze().T[-1])
-            # Save error
             errors.append(mse(window, recons).cpu().detach().numpy().squeeze().T[-1])
         inputs = np.concatenate(inputs)
         anomalies = np.concatenate(anomalies)
@@ -82,30 +79,22 @@ class AE(nn.Module):
 
     def plot_results(self, data, plot_width: int = 800):
         inputs, anomalies, outputs, errors = self.predict(data)
-
-        # Create a figure
         fig = go.Figure()
-
-        # Add traces for test data, predictions, and anomaly errors
         fig.add_trace(go.Scatter(x=list(range(len(inputs))),
                                  y=inputs,
                                  mode='lines',
                                  name='Test Data',
                                  line=dict(color='blue')))
-
         fig.add_trace(go.Scatter(x=list(range(len(outputs))),
                                  y=outputs,
                                  mode='lines',
                                  name='Predictions',
                                  line=dict(color='purple')))
-
         fig.add_trace(go.Scatter(x=list(range(len(errors))),
                                  y=errors,
                                  mode='lines',
                                  name='Anomaly Errors',
                                  line=dict(color='red')))
-
-        # Highlight points in test_data where label is 1
         label_indices = [i for i in range(len(anomalies)) if anomalies[i] == 1]
         if label_indices:
             fig.add_trace(go.Scatter(x=label_indices,
@@ -113,15 +102,74 @@ class AE(nn.Module):
                                      mode='markers',
                                      name='Labels on Test Data',
                                      marker=dict(color='orange', size=10)))
-
-        # Set the layout
         fig.update_layout(title='Test Data, Predictions, and Anomalies',
-                              xaxis_title='Time Steps',
-                              yaxis_title='Value',
-                              legend=dict(x=0, y=1, traceorder='normal', orientation='h'),
-                              template='plotly',
-                              width=plot_width)
-
-        # Show the figure
+                          xaxis_title='Time Steps',
+                          yaxis_title='Value',
+                          legend=dict(x=0, y=1, traceorder='normal', orientation='h'),
+                          template='plotly',
+                          width=plot_width)
         fig.show()
 
+    def plot_losses(self):
+        n_epochs = len(self.losses)
+        xs = np.arange(n_epochs) + 1
+        plt.plot(xs, self.losses, label='Total Loss')
+        plt.grid()
+        plt.xticks(xs)
+        plt.legend()
+        plt.show()
+
+    def save(self, path: str = ''):
+        """
+        Save the model, optimizer state, and training history to a file.
+        """
+        if path == '':
+            path = self.name + '_' + str(len(self.losses)).zfill(3) + '.pth'
+        torch.save({
+            'model_state_dict': self.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'losses': self.losses,
+            'config': {
+                'n_features': self.n_features,
+                'window_size': self.window_size,
+                'latent_dim': self.latent_dim,
+                'lstm_units': self.lstm_units,
+                'device': self.device,
+                'lr': self.lr,
+            }
+        }, path)
+        print(f'Model saved to path = {path}')
+
+    @staticmethod
+    def load(path: str, weights_only: bool = True):
+        """
+        Load a model, optimizer state, and training history from a file.
+        By default, uses `weights_only=True` for safety.
+        """
+        if weights_only:
+            checkpoint = torch.load(path, weights_only=True)
+            config = checkpoint.get('config', {})
+            model = AE(
+                n_features=config.get('n_features', 1),
+                window_size=config.get('window_size', 256),
+                latent_dim=config.get('latent_dim', 32),
+                lstm_units=config.get('lstm_units', 64),
+                device=config.get('device', 'cpu')
+            )
+            model.load_state_dict(checkpoint['model_state_dict'])
+            model.losses = checkpoint.get('losses', [])
+        else:
+            checkpoint = torch.load(path)  # Be cautious with untrusted files
+            config = checkpoint['config']
+            model = AE(
+                n_features=config['n_features'],
+                window_size=config['window_size'],
+                latent_dim=config['latent_dim'],
+                lstm_units=config['lstm_units'],
+                device=config['device']
+            )
+            model.load_state_dict(checkpoint['model_state_dict'])
+            model.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            model.losses = checkpoint['losses']
+
+        return model

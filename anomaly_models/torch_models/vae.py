@@ -1,3 +1,4 @@
+from matplotlib import pyplot as plt
 import torch
 import torch.nn as nn
 from tqdm.notebook import tqdm, trange
@@ -30,6 +31,8 @@ class VAE(nn.Module):
 
         self.optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=1e-5)
         self.losses = []
+        self.mse_losses = []
+        self.kld_losses = []
 
     def encode(self, x):
         x, _ = self.encoder_lstm1(x)
@@ -76,10 +79,12 @@ class VAE(nn.Module):
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
-            pbar.set_description(f'MSE = {np.mean(mses):.4f}, KLD = {np.mean(klds):.4f}')
-            self.losses.append(np.mean(mses) + np.mean(klds))
+            mse_mean, kld_mean = np.mean(mses), np.mean(klds)
+            pbar.set_description(f'MSE = {mse_mean:.4f}, KLD = {kld_mean:.4f}')
+            self.mse_losses.append(mse_mean), self.kld_losses.append(kld_mean)
+            self.losses.append(mse_mean + kld_mean)
 
-    def predict(self, data, name: str = ''):
+    def predict(self, data):
         inputs, anomalies, outputs, errors = [], [], [], []
         mse = nn.MSELoss(reduction='none').to(self.device)
         for window, anomaly in data:
@@ -134,3 +139,60 @@ class VAE(nn.Module):
                           width=plot_width)
 
         fig.show()
+
+    def plot_losses(self):
+        n_epochs = len(self.losses)
+        xs = np.arange(n_epochs) + 1
+        plt.plot(xs, self.losses, label='Total Loss')
+        plt.plot(xs, self.mse_losses, label='MSE Losses')
+        plt.plot(xs, self.kld_losses, label='KLD Losses')
+        plt.grid()
+        plt.xticks(xs)
+        plt.legend()
+        plt.show()
+
+    def save(self, path: str = ''):
+        """
+        Save the model, optimizer state, and training history to a file.
+        """
+        if path == '':
+            path = self.name + '_' + str(len(self.losses)).zfill(3) + '.pth'
+        torch.save({
+            'model_state_dict': self.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'losses': self.losses,
+            'mse_losses': self.mse_losses,
+            'kld_losses': self.kld_losses,
+            'config': {
+                'n_features': self.n_features,
+                'window_size': self.window_size,
+                'latent_dim': self.latent_dim,
+                'lstm_units': self.lstm_units,
+                'device': self.device,
+                'lr': self.lr,
+            }
+        }, path)
+        print(f'Model saved to path = {path}')
+
+    @staticmethod
+    def load(path: str, weights_only: bool = False):
+        """
+        Load a model, optimizer state, and training history from a file.
+        By default, uses `weights_only=True` for safety.
+        """
+        checkpoint = torch.load(path, weights_only=weights_only)  # Be cautious with untrusted files
+        config = checkpoint['config']
+        model = VAE(
+            n_features=config['n_features'],
+            window_size=config['window_size'],
+            latent_dim=config['latent_dim'],
+            lstm_units=config['lstm_units'],
+            device=config['device']
+        )
+        model.load_state_dict(checkpoint['model_state_dict'])
+        model.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        model.losses = checkpoint['losses']
+        model.mse_losses = checkpoint['mse_losses']
+        model.kld_losses = checkpoint['kld_losses']
+
+        return model
