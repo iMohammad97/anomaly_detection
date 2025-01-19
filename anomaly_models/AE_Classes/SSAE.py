@@ -192,3 +192,87 @@ class SeasonalStationaryLSTMAutoencoder:
                 counts[timestep_index] += 1
 
         return self.anomaly_preds, self.anomaly_errors
+
+
+    def save_model(self, model_path: str = "model.h5"):
+        # Save the Keras model
+        if self.model is not None:
+            self.model.save(model_path)
+            print(f"Model saved to {model_path}")
+        else:
+            print("No model to save.")
+
+    def load_model(self, model_path: str, train_path: str, test_path: str, label_path: str):
+        # Use custom_object_scope for the custom layer
+        with custom_object_scope({'StationaryLoss': StationaryLoss}):
+            self.model = models.load_model(
+                model_path,
+                compile=False  # Avoid recompiling until the model is fully loaded
+            )
+        
+        # Compile the model for evaluation or retraining
+        self.model.compile(
+            optimizer='adam',
+            loss='mean_squared_error',
+            metrics=['mean_squared_error']
+        )
+        
+        # Load data
+        self.train_data = np.load(train_path)
+        self.test_data = np.load(test_path)
+        self.labels = np.load(label_path)
+        
+        # Recreate the windows with the newly loaded data
+        self.train_data_window = create_windows(self.train_data, self.timesteps)
+        self.test_data_window = create_windows(self.test_data, self.timesteps)
+
+    def plot_results(self, size=800):
+        # Flattening arrays to ensure they are 1D
+        test_data = self.test_data.ravel()  # Convert to 1D array
+        anomaly_preds = self.anomaly_preds  # Already 1D
+        anomaly_errors = self.anomaly_errors  # Already 1D
+        predictions = self.predictions  # Already 1D
+        labels = self.labels.ravel()  # Convert to 1D array
+
+        # Check if all inputs have the same length
+        if not (len(test_data) == len(labels) == len(anomaly_preds) == len(anomaly_errors) == len(predictions)):
+            raise ValueError("All input arrays must have the same length.")
+
+        # Create a figure
+        fig = go.Figure()
+
+        # Add traces for test data, predictions, and anomaly errors
+        fig.add_trace(go.Scatter(x=list(range(len(test_data))),
+                                 y=test_data,
+                                 mode='lines',
+                                 name='Test Data'))
+
+        fig.add_trace(go.Scatter(x=list(range(len(predictions))),
+                                 y=predictions,
+                                 mode='lines',
+                                 name='Predictions'))
+
+        fig.add_trace(go.Scatter(x=list(range(len(anomaly_errors))),
+                                 y=anomaly_errors,
+                                 mode='lines',
+                                 name='Anomaly Errors'))
+
+        # Set the layout
+        fig.update_layout(title='Test Data, Predictions, and Anomalies',
+                          xaxis_title='Time Steps',
+                          yaxis_title='Value',
+                          template='plotly')
+        fig.show()
+
+    def plot_losses(self):
+        # Plot the loss values
+        plt.figure(figsize=(10, 6))
+        plt.plot(self.losses['mse'], label='MSE Reconstruction Loss')
+        plt.plot(self.losses['mean'], label='Latent Mean Loss')
+        plt.plot(self.losses['std'], label='Latent Standard Deviation Loss')
+        plt.xlabel('Epochs')
+        plt.ylabel('Loss')
+        plt.title('Training Loss Over Epochs')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
