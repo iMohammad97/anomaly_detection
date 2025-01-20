@@ -130,7 +130,7 @@ class VariationalLSTMAutoencoder:
             pbar.set_description(
                 f"MSE Loss = {self.losses['mse'][-1]:.4f}, KL Divergence Loss = {self.losses['kld'][-1]:.4f}")
 
-            # Eearly stopping
+            # Early stopping
             if epoch_loss < best_epoch_loss:
                 best_epoch_loss = epoch_loss
                 patience_counter = 0
@@ -253,7 +253,7 @@ class VariationalLSTMAutoencoder:
         # Show the figure
         fig.show()
 
-    def save_state(self, file_path: str, model_path: str = "model.h5"):
+    def save_state(self, file_path: str = "state.json", model_path: str = "model.h5"):
         """Save the state of the object and the Keras model."""
         # Save the Keras model
         if self.model is not None:
