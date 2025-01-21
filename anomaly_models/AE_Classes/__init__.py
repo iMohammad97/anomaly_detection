@@ -2,4 +2,4 @@ from .AE_Class import LSTMAutoencoder
 from .VAE_Class import VariationalLSTMAutoencoder
 from .ADF_Class import AugmentedDickeyFullerLSTMAutoencoder
 from .SAE_Class import StationaryLSTMAutoencoder
-from .SSAE import SeasonalStationaryLSTMAutoencoder
+from .SSAE_Class import SeasonalStationaryLSTMAutoencoder
