@@ -71,7 +71,7 @@ class StationaryLSTMAutoencoder:
         # DAE Model
         self.model = models.Model(inputs, outputs)  # Return only the outputs (no KL divergence in this case)
 
-    def train(self, batch_size: int = 32, epochs: int = 50, optimizer: str = 'adam', patience: int = 5, seed: int = 42, shuffle: bool = False):
+    def train(self, batch_size: int = 32, epochs: int = 50, optimizer: str = 'adam', patience: int = 15, seed: int = 42, shuffle: bool = False):
         set_seed(seed)
         # Ensure the optimizer is set up correctly
         if isinstance(optimizer, str):
