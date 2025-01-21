@@ -181,7 +181,7 @@ class LSTMAutoencoder:
             raise ValueError("All input arrays must have the same length.")
 
         # Determine plot width based on length of test_data
-        plot_width = min(size, len(test_data) //10)  # Ensure a minimum width of 800, scale with data length
+        plot_width = max(size, len(test_data) //10)  # Ensure a minimum width of 800, scale with data length
 
         # Create a figure
         fig = go.Figure()

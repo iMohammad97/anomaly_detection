@@ -240,6 +240,8 @@ class StationaryLSTMAutoencoder:
         predictions = self.predictions  # Already 1D
         labels = self.labels.ravel()  # Convert to 1D array
 
+        plot_width = max(size, len(test_data) // 10)  # Ensure a minimum width of 800, scale with data length
+
         # Check if all inputs have the same length
         if not (len(test_data) == len(labels) == len(anomaly_preds) == len(anomaly_errors) == len(predictions)):
             raise ValueError("All input arrays must have the same length.")
@@ -274,9 +276,11 @@ class StationaryLSTMAutoencoder:
 
         # Set the layout
         fig.update_layout(title='Test Data, Predictions, and Anomalies',
-                          xaxis_title='Time Steps',
-                          yaxis_title='Value',
-                          template='plotly')
+                          xaxis_title='Time Steps', yaxis_title='Value',
+                          legend=dict(x=0, y=1, traceorder='normal', orientation='h'),
+                          template='plotly', width=plot_width)
+
+        # Show the figure
         fig.show()
 
     def plot_losses(self):
