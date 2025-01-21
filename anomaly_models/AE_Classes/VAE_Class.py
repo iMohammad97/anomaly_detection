@@ -258,7 +258,7 @@ class VariationalLSTMAutoencoder:
         # Show the figure
         fig.show()
 
-    def save_state(self, file_path: str = "state.json", model_path: str = "model.h5"):
+    def save_state(self, model_path: str = "model.h5"):
         """Save the state of the object and the Keras model."""
         # Save the Keras model
         if self.model is not None:
@@ -267,54 +267,33 @@ class VariationalLSTMAutoencoder:
         else:
             print("No model to save.")
 
-        # Save the rest of the attributes
-        state = {
-            'train_data': self.train_data.tolist(),
-            'test_data': self.test_data.tolist(),
-            'labels': self.labels.tolist(),
-            'timesteps': self.timesteps,
-            'features': self.features,
-            'latent_dim': self.latent_dim,
-            'lstm_units': self.lstm_units,
-            'threshold': self.threshold,
-            'predictions_windows': self.predictions_windows.tolist(),
-            'anomaly_preds': self.anomaly_preds.tolist(),
-            'anomaly_errors': self.anomaly_errors.tolist(),
-            'predictions': self.predictions.tolist(),
-            'losses': self.losses,
-            'model_path': model_path  # Save the model path for loading later
-        }
-        with open(file_path, 'w') as file:
-            json.dump(state, file)
-        print(f"State saved to {file_path}")
-
-    def load_state(self, file_path: str):
+    def load_model(self, model_path: str, train_path: str, test_path: str, label_path: str):
         """Load the state of the object and the Keras model."""
-        with open(file_path, 'r') as file:
-            state = json.load(file)
+        # Load the model
+        self.model = models.load_model(
+            model_path,
+            compile=False
+        )
 
-        # Restore the attributes
-        self.train_data = np.array(state['train_data'])
-        self.test_data = np.array(state['test_data'])
-        self.labels = np.array(state['labels'])
-        self.timesteps = state['timesteps']
-        self.features = state['features']
-        self.latent_dim = state['latent_dim']
-        self.lstm_units = state['lstm_units']
-        self.threshold = state['threshold']
-        self.predictions_windows = np.array(state['predictions_windows'])
-        self.anomaly_preds = np.array(state['anomaly_preds'])
-        self.anomaly_errors = np.array(state['anomaly_errors'])
-        self.predictions = np.array(state['predictions'])
-        self.losses = state['losses']
+        # As we DO need to compile for evaluation or re-training
+        self.model.compile(
+            optimizer='adam',
+            loss='mean_squared_error',
+            metrics=['mean_squared_error']
+        )
 
-        # Load the Keras model if a path is provided
-        model_path = state.get('model_path', None)
-        if model_path and os.path.exists(model_path):
-            self.model = tf.keras.models.load_model(model_path)
-            print(f"Model loaded from {model_path}")
-        else:
-            print("No model found to load.")
+        # Load data
+        self.train_data = np.load(train_path)
+        self.test_data = np.load(test_path)
+        self.labels = np.load(label_path)
+
+        # Recreate the windows with the newly loaded data
+        self.train_data_window = create_windows(self.train_data, self.timesteps)
+        self.test_data_window = create_windows(self.test_data, self.timesteps)
+
+        # Evaluate the model on the newly loaded data
+        # This will populate self.threshold, self.predictions_windows, self.anomaly_preds, etc.
+        # self.evaluate()
 
     def plot_losses(self):
         # Plot the loss values
