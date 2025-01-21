@@ -8,8 +8,9 @@ from tqdm.notebook import tqdm, trange
 
 ## DAGMM Model (ICLR 18)
 class DAGMM(nn.Module):
-    def __init__(self, feats: int = 1, device: str = 'cpu'):
+    def __init__(self, feats: int = 1, device: str = 'cpu', seed: int = 0):
         super(DAGMM, self).__init__()
+        torch.manual_seed(seed)
         self.name = 'DAGMM'
         self.lr = 0.0001
         self.device = device
@@ -56,8 +57,9 @@ class DAGMM(nn.Module):
         gamma = self.estimate(z)
         return z_c, x_hat.view(-1), z, gamma.view(-1)
 
-    def learn(self, data, n_epochs):
+    def learn(self, data, n_epochs: int, seed: int = 42):
         """Train the model and return the average loss and learning rate."""
+        torch.manual_seed(seed)
         self.train(True)
         l = nn.MSELoss(reduction='none').to(self.device)
         for _ in (pbar := trange(n_epochs)):

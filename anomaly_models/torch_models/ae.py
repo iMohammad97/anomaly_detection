@@ -7,8 +7,9 @@ import plotly.graph_objects as go
 
 
 class AE(nn.Module):
-    def __init__(self, n_features: int = 1, window_size: int = 256, latent_dim: int = 32, lstm_units: int = 64, device: str = 'cpu'):
+    def __init__(self, n_features: int = 1, window_size: int = 256, latent_dim: int = 32, lstm_units: int = 64, device: str = 'cpu', seed: int = 0):
         super(AE, self).__init__()
+        torch.manual_seed(seed)
         self.name = 'AE'
         self.lr = 0.0001
         self.device = device
@@ -45,7 +46,8 @@ class AE(nn.Module):
 
         return output
 
-    def learn(self, train_loader, n_epochs: int):
+    def learn(self, train_loader, n_epochs: int, seed: int = 42):
+        torch.manual_seed(seed)
         self.train()
         mse = nn.MSELoss(reduction='mean').to(self.device)
         for _ in (pbar := trange(n_epochs)):

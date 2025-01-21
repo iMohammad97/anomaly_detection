@@ -6,8 +6,9 @@ import numpy as np
 import plotly.graph_objects as go
 
 class VAE(nn.Module):
-    def __init__(self, n_features: int = 1, window_size: int = 256, latent_dim: int = 32, lstm_units: int = 64, device: str = 'cpu'):
+    def __init__(self, n_features: int = 1, window_size: int = 256, latent_dim: int = 32, lstm_units: int = 64, device: str = 'cpu', seed: int = 0):
         super(VAE, self).__init__()
+        torch.manual_seed(seed)
         self.name = 'VAE'
         self.lr = 0.0001
         self.device = device
@@ -66,7 +67,8 @@ class VAE(nn.Module):
         KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
         return BCE, KLD
 
-    def learn(self, train_loader, n_epochs: int):
+    def learn(self, train_loader, n_epochs: int, seed: int = 42):
+        torch.manual_seed(seed)
         self.train()
         for _ in (pbar := trange(n_epochs)):
             mses, klds = [], []

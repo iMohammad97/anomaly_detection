@@ -7,8 +7,9 @@ import plotly.graph_objects as go
 
 # MAD_GAN (ICANN 19)
 class MAD_GAN(nn.Module):
-    def __init__(self, feats: int = 1, device: str = 'cpu'):
+    def __init__(self, feats: int = 1, device: str = 'cpu', seed: int = 0):
         super(MAD_GAN, self).__init__()
+        torch.manual_seed(seed)
         self.name = 'MAD_GAN'
         self.lr = 0.0001
         self.device = device
@@ -42,7 +43,8 @@ class MAD_GAN(nn.Module):
         fake_score = self.discriminator(z)
         return z, real_score, fake_score
 
-    def learn(self, train_loader, n_epochs: int):
+    def learn(self, train_loader, n_epochs: int, seed: int = 42):
+        torch.manual_seed(seed)
         self.train()
         bcel = nn.BCELoss(reduction='mean').to(self.device)
         msel = nn.MSELoss(reduction='mean').to(self.device)

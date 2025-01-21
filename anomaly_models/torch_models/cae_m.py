@@ -7,8 +7,9 @@ from matplotlib import pyplot as plt
 
 ## CAE-M Model (TKDE 21)
 class CAE_M(nn.Module):
-    def __init__(self, window_size: int , feats: int = 1, device: str = 'cpu'):
+    def __init__(self, window_size: int , feats: int = 1, device: str = 'cpu', seed: int = 0):
         super(CAE_M, self).__init__()
+        torch.manual_seed(seed)
         self.name = 'CAE_M'
         self.lr = 0.001
         self.device = device
@@ -36,7 +37,8 @@ class CAE_M(nn.Module):
         x = self.decoder(z)
         return x.view(-1, self.n_window, self.n_feats)
 
-    def learn(self, train_loader, n_epochs: int):
+    def learn(self, train_loader, n_epochs: int, seed: int = 42):
+        torch.manual_seed(seed)
         self.train()
         mse = nn.MSELoss(reduction='mean').to(self.device)
         for _ in (pbar := trange(n_epochs)):

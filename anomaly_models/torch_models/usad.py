@@ -7,8 +7,9 @@ from tqdm.notebook import tqdm, trange
 
 ## USAD Model (KDD 20)
 class USAD(nn.Module):
-	def __init__(self, feats: int = 1, device: str = 'cpu'):
+	def __init__(self, feats: int = 1, device: str = 'cpu', seed: int = 0):
 		super(USAD, self).__init__()
+		torch.manual_seed(seed)
 		self.name = 'USAD'
 		self.lr = 0.0001
 		self.n_feats = feats
@@ -48,7 +49,8 @@ class USAD(nn.Module):
 		ae2ae1 = self.decoder2(self.encoder(ae1))
 		return ae1.view(-1, self.n_window, self.n_feats), ae2.view(-1, self.n_window, self.n_feats), ae2ae1.view(-1, self.n_window, self.n_feats)
 
-	def learn(self, train_loader, n_epochs: int):
+	def learn(self, train_loader, n_epochs: int, seed: int = 42):
+		torch.manual_seed(seed)
 		self.train()
 		mse = nn.MSELoss(reduction='none').to(self.device)
 		for n in (pbar := trange(1, n_epochs + 1)):

@@ -34,11 +34,12 @@ class UCR(Dataset):
             return self.data[idx], self.labels[idx]
         return self.data[idx]
 
-def get_dataloaders(path: str, window_size: int, batch_size: int, step_size: int = 1, data_id: int = 0):
+def get_dataloaders(path: str, window_size: int, batch_size: int, step_size: int = 1, data_id: int = 0, shuffle: bool = False, seed: int = 0):
+    torch.manual_seed(seed)
     # Create datasets
     train_dataset = UCR(path, window_size, step_size=step_size, train=True, data_id=data_id)
     test_dataset = UCR(path, window_size, step_size=1, train=False, data_id=data_id) # test step size should always be 1
     # Create DataLoaders
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
     return train_loader, test_loader
