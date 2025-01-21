@@ -115,18 +115,62 @@ def low_pass_filter(signal, cutoff_frequency, sampling_rate):
 
     # Perform FFT to get the frequency components
     fft_signal = fft(signal)
-    
+
     # Compute the frequency axis
     n = len(signal)
     freqs = np.fft.fftfreq(n, d=1/sampling_rate)
-    
+
     # Apply the low-pass filter (attenuate frequencies above cutoff)
     fft_signal[np.abs(freqs) > cutoff_frequency] = 0
-    
+
     # Inverse FFT to get the filtered signal
     filtered_signal = np.fft.ifft(fft_signal)
-    
+
     return np.real(filtered_signal)
+
+
+import numpy as np
+from scipy.fft import fft, ifft
+
+
+def low_pass_filter_with_dynamic_cutoff(signal, sampling_rate, threshold=0.1):
+    """
+    Low-pass filter for a 1D signal with a dynamically calculated cutoff frequency.
+
+    Parameters:
+        signal (array-like): The input signal to filter.
+        sampling_rate (float): The sampling rate of the signal in Hz.
+        threshold (float): Fraction of the maximum amplitude in the FFT spectrum
+                           used to determine the cutoff frequency.
+
+    Returns:
+        filtered_signal (array-like): The filtered signal.
+        cutoff_frequency (float): The calculated cutoff frequency.
+    """
+    # Perform FFT to get the frequency components
+    fft_signal = fft(signal)
+    n = len(signal)
+
+    # Compute the frequency axis
+    freqs = np.fft.fftfreq(n, d=1 / sampling_rate)
+
+    # Compute the magnitude spectrum
+    magnitude_spectrum = np.abs(fft_signal)
+
+    # Find the maximum amplitude in the spectrum
+    max_amplitude = np.max(magnitude_spectrum)
+
+    # Define the cutoff frequency based on the threshold
+    cutoff_frequency = np.max(freqs[magnitude_spectrum >= threshold * max_amplitude])
+
+    # Apply the low-pass filter (attenuate frequencies above the cutoff)
+    fft_signal[np.abs(freqs) > cutoff_frequency] = 0
+
+    # Inverse FFT to get the filtered signal
+    filtered_signal = ifft(fft_signal)
+
+    return np.real(filtered_signal), cutoff_frequency
+
 
 def high_pass_filter(signal, cutoff_frequency, sampling_rate):
 
@@ -144,4 +188,43 @@ def high_pass_filter(signal, cutoff_frequency, sampling_rate):
     filtered_signal = np.fft.ifft(fft_signal)
     
     return np.real(filtered_signal)
+
+
+def high_pass_filter_with_dynamic_cutoff(signal, sampling_rate, threshold=0.1):
+    """
+    High-pass filter for a 1D signal with a dynamically calculated cutoff frequency.
+
+    Parameters:
+        signal (array-like): The input signal to filter.
+        sampling_rate (float): The sampling rate of the signal in Hz.
+        threshold (float): Fraction of the maximum amplitude in the FFT spectrum
+                           used to determine the cutoff frequency.
+
+    Returns:
+        filtered_signal (array-like): The filtered signal.
+        cutoff_frequency (float): The calculated cutoff frequency.
+    """
+    # Perform FFT to get the frequency components
+    fft_signal = fft(signal)
+    n = len(signal)
+
+    # Compute the frequency axis
+    freqs = np.fft.fftfreq(n, d=1 / sampling_rate)
+
+    # Compute the magnitude spectrum
+    magnitude_spectrum = np.abs(fft_signal)
+
+    # Find the maximum amplitude in the spectrum
+    max_amplitude = np.max(magnitude_spectrum)
+
+    # Define the cutoff frequency based on the threshold
+    cutoff_frequency = np.min(np.abs(freqs[magnitude_spectrum >= threshold * max_amplitude]))
+
+    # Apply the high-pass filter (attenuate frequencies below the cutoff)
+    fft_signal[np.abs(freqs) < cutoff_frequency] = 0
+
+    # Inverse FFT to get the filtered signal
+    filtered_signal = ifft(fft_signal)
+
+    return np.real(filtered_signal), cutoff_frequency
 
