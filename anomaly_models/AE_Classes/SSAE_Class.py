@@ -78,7 +78,7 @@ class SeasonalStationaryLSTMAutoencoder:
         # Model
         self.model = models.Model(inputs, outputs)
 
-    def train(self, batch_size: int = 32, epochs: int = 50, optimizer: str = 'adam', patience: int = 5, seed: int = 42, shuffle: bool = False):
+    def train(self, batch_size: int = 32, epochs: int = 50, optimizer: str = 'adam', patience: int = 15, seed: int = 42, shuffle: bool = False):
         set_seed(seed)
         if isinstance(optimizer, str):
             optimizer = tf.keras.optimizers.get(optimizer)

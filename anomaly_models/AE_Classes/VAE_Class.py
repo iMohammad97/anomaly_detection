@@ -78,7 +78,7 @@ class VariationalLSTMAutoencoder:
         mse = np.mean(np.square(self.train_data_window - rec), axis=(1, 2))
         self.threshold = np.mean(mse) + self.threshold_sigma * np.std(mse)
 
-    def train(self, batch_size: int = 32, epochs: int = 50, optimizer: str = 'adam', patience: int = 5):
+    def train(self, batch_size: int = 32, epochs: int = 50, optimizer: str = 'adam', patience: int = 15):
         # Ensure the optimizer is set up correctly
         if isinstance(optimizer, str):
             optimizer = tf.keras.optimizers.get(optimizer)  # Get optimizer by name
