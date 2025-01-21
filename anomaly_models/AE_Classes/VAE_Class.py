@@ -268,13 +268,21 @@ class VariationalLSTMAutoencoder:
 
     def load_model(self, model_path: str, train_path: str, test_path: str, label_path: str):
         """Load the state of the object and the Keras model."""
-        # Load the model
-        self.model = models.load_model(
-            model_path,
-            compile=False
-        )
 
-        # As we DO need to compile for evaluation or re-training
+        # Define the Sampling layer class inside the function for proper scope
+        class Sampling(layers.Layer):
+            def call(self, inputs):
+                z_mean, z_log_var = inputs
+                batch = tf.shape(z_mean)[0]
+                dim = tf.shape(z_mean)[1]
+                epsilon = tf.keras.backend.random_normal(shape=(batch, dim))
+                return z_mean + tf.exp(0.5 * z_log_var) * epsilon
+
+        # Use custom_object_scope for loading the model
+        with custom_object_scope({'Sampling': Sampling}):
+            self.model = models.load_model(model_path, compile=False)
+
+        # Compile the model for evaluation or retraining
         self.model.compile(
             optimizer='adam',
             loss='mean_squared_error',
