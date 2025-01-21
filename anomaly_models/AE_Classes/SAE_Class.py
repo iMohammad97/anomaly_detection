@@ -263,6 +263,15 @@ class StationaryLSTMAutoencoder:
                                  mode='lines',
                                  name='Anomaly Errors'))
 
+        # Highlight points in test_data where label is 1
+        label_indices = [i for i in range(len(labels)) if labels[i] == 1]
+        if label_indices:
+            fig.add_trace(go.Scatter(x=label_indices,
+                                     y=[test_data[i] for i in label_indices],
+                                     mode='markers',
+                                     name='Labels on Test Data',
+                                     marker=dict(color='orange', size=10)))
+
         # Set the layout
         fig.update_layout(title='Test Data, Predictions, and Anomalies',
                           xaxis_title='Time Steps',
