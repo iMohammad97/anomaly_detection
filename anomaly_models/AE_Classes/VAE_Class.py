@@ -1,4 +1,5 @@
 from tensorflow.keras import layers, models
+from tensorflow.keras.utils import custom_object_scope
 from anomaly_models.AE import create_windows
 import os
 import json
