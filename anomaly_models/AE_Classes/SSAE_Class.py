@@ -29,7 +29,7 @@ class StationaryLoss(layers.Layer):
 
 
 class SeasonalStationaryLSTMAutoencoder:
-    def __init__(self, train_data, test_data, labels, timesteps: int = 128, features: int = 1, latent_dim: int = 32, lstm_units: int = 64, step_size: int = 1, threshold_sigma=2.0):
+    def __init__(self, train_data, test_data, labels, timesteps: int = 128, features: int = 1, latent_dim: int = 32, lstm_units: int = 64, step_size: int = 1, threshold_sigma=2.0, seed: int = 0):
         self.train_data = train_data
         self.test_data = test_data
         self.train_data_window = create_windows(self.train_data, timesteps, step_size)
@@ -48,6 +48,7 @@ class SeasonalStationaryLSTMAutoencoder:
         self.labels = labels
         self.name = "LSTM_SSAE"
         self.losses = {"mse": [], "mean": [], "std": [], "seasonality": []}
+        set_seed(seed)
         self._build_model()
 
     def _build_model(self):
@@ -77,7 +78,8 @@ class SeasonalStationaryLSTMAutoencoder:
         # Model
         self.model = models.Model(inputs, outputs)
 
-    def train(self, batch_size: int = 32, epochs: int = 50, optimizer: str = 'adam', patience: int = 5, seasonality_steps=12):
+    def train(self, batch_size: int = 32, epochs: int = 50, optimizer: str = 'adam', patience: int = 5, seasonality_steps=12, seed: int = 42, shuffle: bool = False):
+        set_seed(seed)
         if isinstance(optimizer, str):
             optimizer = tf.keras.optimizers.get(optimizer)
 
@@ -98,6 +100,9 @@ class SeasonalStationaryLSTMAutoencoder:
             mean_loss_tracker.reset_state()
             std_loss_tracker.reset_state()
             seasonality_loss_tracker.reset_state()
+
+            if shuffle:
+                np.random.shuffle(self.train_data_window)
 
             for step in trange(0, len(self.train_data_window), batch_size, leave=False):
                 batch_data = self.train_data_window[step:step + batch_size]
@@ -276,3 +281,7 @@ class SeasonalStationaryLSTMAutoencoder:
         plt.legend()
         plt.grid(True)
         plt.show()
+
+def set_seed(seed):
+    np.random.seed(seed)
+    tf.random.set_seed(seed)

@@ -11,7 +11,7 @@ import json
 
 class LSTMAutoencoder:
     def __init__(self, train_data, test_data, labels, timesteps: int = 128, features: int = 1, latent_dim: int = 32,
-                 lstm_units: int = 64, step_size: int = 1, threshold_sigma=2.0):
+                 lstm_units: int = 64, step_size: int = 1, threshold_sigma=2.0, seed: int = 0):
         self.train_data = train_data
         self.test_data = test_data
         self.train_data_window = create_windows(self.train_data, timesteps, step_size)
@@ -30,6 +30,7 @@ class LSTMAutoencoder:
         self.labels = labels
         self.name = 'LSTMAutoencoder'  # Add a name attribute to the class
         self.losses = {'train': [], 'valid': []}
+        set_seed(seed)
         self._build_model()
 
     def _build_model(self):
@@ -50,7 +51,8 @@ class LSTMAutoencoder:
         mse = np.mean(np.square(self.train_data_window - rec), axis=(1, 2))
         self.threshold = np.mean(mse) + self.threshold_sigma * np.std(mse)
 
-    def train(self, batch_size=32, epochs=50, optimizer='adam', loss='mse', patience=10):
+    def train(self, batch_size=32, epochs=50, optimizer='adam', loss='mse', patience=10, shuffle: bool = False, seed: int = 42):
+        set_seed(seed)
         # Compile the model with the specified optimizer and loss function
         self.model.compile(optimizer=optimizer, loss=loss)
 
@@ -61,6 +63,7 @@ class LSTMAutoencoder:
         history = self.model.fit(
             self.train_data_window, self.train_data_window,  # Use self.train_data for both input and output
             batch_size=batch_size,
+            shuffle=shuffle,
             validation_split=0.1,  # Split 10% of the training data for validation
             epochs=epochs,
             verbose=1,
@@ -242,3 +245,7 @@ class LSTMAutoencoder:
         plt.legend()
         plt.grid(True)
         plt.show()
+
+def set_seed(seed):
+    np.random.seed(seed)
+    tf.random.set_seed(seed)

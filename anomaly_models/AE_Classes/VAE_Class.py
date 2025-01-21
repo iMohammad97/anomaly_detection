@@ -11,7 +11,7 @@ from matplotlib import pyplot as plt
 
 class VariationalLSTMAutoencoder:
     def __init__(self, train_data, test_data, labels, timesteps: int = 128, features: int = 1, latent_dim: int = 32,
-                 lstm_units: int = 64, step_size: int = 1, threshold_sigma=2.0):
+                 lstm_units: int = 64, step_size: int = 1, threshold_sigma=2.0, seed: int = 0):
 
         self.train_data = train_data
         self.test_data = test_data
@@ -31,6 +31,7 @@ class VariationalLSTMAutoencoder:
         self.labels = labels
         self.name = 'LSTM_VAE'
         self.losses = {'mse': [], 'kld': []}
+        set_seed(seed)
         self._build_model()  # Build the model
 
     def _build_model(self):
@@ -78,7 +79,8 @@ class VariationalLSTMAutoencoder:
         mse = np.mean(np.square(self.train_data_window - rec), axis=(1, 2))
         self.threshold = np.mean(mse) + self.threshold_sigma * np.std(mse)
 
-    def train(self, batch_size: int = 32, epochs: int = 50, optimizer: str = 'adam', patience: int = 5):
+    def train(self, batch_size: int = 32, epochs: int = 50, optimizer: str = 'adam', patience: int = 5, shuffle: bool = False, seed: int = 42):
+        set_seed(seed)
         # Ensure the optimizer is set up correctly
         if isinstance(optimizer, str):
             optimizer = tf.keras.optimizers.get(optimizer)  # Get optimizer by name
@@ -102,6 +104,9 @@ class VariationalLSTMAutoencoder:
             mse_loss_tracker.reset_state()
             kl_loss_tracker.reset_state()
             epoch_loss = 0
+
+            if shuffle:
+                np.random.shuffle(self.train_data_window)
 
             for step in trange(0, len(self.train_data_window), batch_size, leave=False):
                 batch_data = self.train_data_window[step:step + batch_size]
@@ -322,3 +327,7 @@ class VariationalLSTMAutoencoder:
         plt.legend()
         plt.grid(True)
         plt.show()
+
+def set_seed(seed):
+    np.random.seed(seed)
+    tf.random.set_seed(seed)
