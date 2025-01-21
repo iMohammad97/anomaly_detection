@@ -109,3 +109,39 @@ def particle_filter(signal, num_particles=100):
         # Estimate
         estimates.append(np.mean(particles))
     return (np.array(estimates))
+
+
+def low_pass_filter(signal, cutoff_frequency, sampling_rate):
+
+    # Perform FFT to get the frequency components
+    fft_signal = fft(signal)
+    
+    # Compute the frequency axis
+    n = len(signal)
+    freqs = np.fft.fftfreq(n, d=1/sampling_rate)
+    
+    # Apply the low-pass filter (attenuate frequencies above cutoff)
+    fft_signal[np.abs(freqs) > cutoff_frequency] = 0
+    
+    # Inverse FFT to get the filtered signal
+    filtered_signal = np.fft.ifft(fft_signal)
+    
+    return np.real(filtered_signal)
+
+def high_pass_filter(signal, cutoff_frequency, sampling_rate):
+
+    # Perform FFT to get the frequency components
+    fft_signal = fft(signal)
+    
+    # Compute the frequency axis
+    n = len(signal)
+    freqs = np.fft.fftfreq(n, d=1/sampling_rate)
+    
+    # Apply the high-pass filter (attenuate frequencies below cutoff)
+    fft_signal[np.abs(freqs) < cutoff_frequency] = 0
+    
+    # Inverse FFT to get the filtered signal
+    filtered_signal = np.fft.ifft(fft_signal)
+    
+    return np.real(filtered_signal)
+
