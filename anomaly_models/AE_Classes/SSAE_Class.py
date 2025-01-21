@@ -110,8 +110,8 @@ class SeasonalStationaryLSTMAutoencoder:
                 with tf.GradientTape() as tape:
                     # Forward pass
                     seasonality_steps, seasonality, residual = self.model(batch_data, training=True)
-                    seasonality_steps = tf.cast(seasonality_steps, tf.int32)
-
+                    seasonality_steps = seasonality_steps[0]  # Extract the scalar value
+                    seasonality_steps = tf.cast(seasonality_steps, tf.int32)  # Ensure it's an integer
                     # Compute the reconstruction loss (difference between input and the predicted residuals + seasonality)
                     reconstruction = seasonality + residual
                     mse_loss = mse_loss_fn(batch_data, reconstruction)
