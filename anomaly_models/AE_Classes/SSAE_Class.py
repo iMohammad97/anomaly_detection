@@ -78,7 +78,7 @@ class SeasonalStationaryLSTMAutoencoder:
         # Model
         self.model = models.Model(inputs, outputs)
 
-    def train(self, batch_size: int = 32, epochs: int = 50, optimizer: str = 'adam', patience: int = 5, seasonality_steps=12, seed: int = 42, shuffle: bool = False):
+    def train(self, batch_size: int = 32, epochs: int = 50, optimizer: str = 'adam', patience: int = 5, seed: int = 42, shuffle: bool = False):
         set_seed(seed)
         if isinstance(optimizer, str):
             optimizer = tf.keras.optimizers.get(optimizer)
@@ -109,7 +109,7 @@ class SeasonalStationaryLSTMAutoencoder:
                 epoch_loss = 0  # To track total loss in the epoch
                 with tf.GradientTape() as tape:
                     # Forward pass
-                    seasonality_length, seasonality, residual = self.model(batch_data, training=True)
+                    seasonality_steps, seasonality, residual = self.model(batch_data, training=True)
 
                     # Compute the reconstruction loss (difference between input and the predicted residuals + seasonality)
                     reconstruction = seasonality + residual
