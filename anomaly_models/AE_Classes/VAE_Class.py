@@ -11,7 +11,7 @@ from matplotlib import pyplot as plt
 
 class VariationalLSTMAutoencoder:
     def __init__(self, train_data, test_data, labels, timesteps: int = 128, features: int = 1, latent_dim: int = 32,
-                 lstm_units: int = 64, step_size: int = 1, threshold_sigma=2.0, seed: int = 0):
+                 lstm_units: int = 64, step_size: int = 1, threshold_sigma=2.0):
 
         self.train_data = train_data
         self.test_data = test_data
@@ -31,7 +31,6 @@ class VariationalLSTMAutoencoder:
         self.labels = labels
         self.name = 'LSTM_VAE'
         self.losses = {'mse': [], 'kld': []}
-        set_seed(seed)
         self._build_model()  # Build the model
 
     def _build_model(self):
@@ -79,8 +78,7 @@ class VariationalLSTMAutoencoder:
         mse = np.mean(np.square(self.train_data_window - rec), axis=(1, 2))
         self.threshold = np.mean(mse) + self.threshold_sigma * np.std(mse)
 
-    def train(self, batch_size: int = 32, epochs: int = 50, optimizer: str = 'adam', patience: int = 5, shuffle: bool = False, seed: int = 42):
-        set_seed(seed)
+    def train(self, batch_size: int = 32, epochs: int = 50, optimizer: str = 'adam', patience: int = 5):
         # Ensure the optimizer is set up correctly
         if isinstance(optimizer, str):
             optimizer = tf.keras.optimizers.get(optimizer)  # Get optimizer by name
@@ -94,8 +92,8 @@ class VariationalLSTMAutoencoder:
         mse_loss_tracker = tf.keras.metrics.Mean(name="mse_loss")
         kl_loss_tracker = tf.keras.metrics.Mean(name="kl_loss")
 
-        # Early stopping variables 
-        best_epoch_loss = float('inf') 
+        # Early stopping variables
+        best_epoch_loss = float('inf')
         patience_counter = 0
 
         # Training loop
@@ -104,9 +102,6 @@ class VariationalLSTMAutoencoder:
             mse_loss_tracker.reset_state()
             kl_loss_tracker.reset_state()
             epoch_loss = 0
-
-            if shuffle:
-                np.random.shuffle(self.train_data_window)
 
             for step in trange(0, len(self.train_data_window), batch_size, leave=False):
                 batch_data = self.train_data_window[step:step + batch_size]
@@ -141,8 +136,8 @@ class VariationalLSTMAutoencoder:
                 patience_counter = 0
             else:
                 patience_counter += 1
-                if patience_counter >= patience: 
-                    print(f"Early stopping triggered after {epoch + 1} epochs.") 
+                if patience_counter >= patience:
+                    print(f"Early stopping triggered after {epoch + 1} epochs.")
                     break
 
     def evaluate(self, batch_size=32):
@@ -258,7 +253,7 @@ class VariationalLSTMAutoencoder:
         # Show the figure
         fig.show()
 
-    def save_state(self, file_path: str = "state.json", model_path: str = "model.h5"):
+    def save_state(self, model_path: str = "model.h5"):
         """Save the state of the object and the Keras model."""
         # Save the Keras model
         if self.model is not None:
@@ -267,54 +262,33 @@ class VariationalLSTMAutoencoder:
         else:
             print("No model to save.")
 
-        # Save the rest of the attributes
-        state = {
-            'train_data': self.train_data.tolist(),
-            'test_data': self.test_data.tolist(),
-            'labels': self.labels.tolist(),
-            'timesteps': self.timesteps,
-            'features': self.features,
-            'latent_dim': self.latent_dim,
-            'lstm_units': self.lstm_units,
-            'threshold': self.threshold,
-            'predictions_windows': self.predictions_windows.tolist(),
-            'anomaly_preds': self.anomaly_preds.tolist(),
-            'anomaly_errors': self.anomaly_errors.tolist(),
-            'predictions': self.predictions.tolist(),
-            'losses': self.losses,
-            'model_path': model_path  # Save the model path for loading later
-        }
-        with open(file_path, 'w') as file:
-            json.dump(state, file)
-        print(f"State saved to {file_path}")
-
-    def load_state(self, file_path: str):
+    def load_model(self, model_path: str, train_path: str, test_path: str, label_path: str):
         """Load the state of the object and the Keras model."""
-        with open(file_path, 'r') as file:
-            state = json.load(file)
+        # Load the model
+        self.model = models.load_model(
+            model_path,
+            compile=False
+        )
 
-        # Restore the attributes
-        self.train_data = np.array(state['train_data'])
-        self.test_data = np.array(state['test_data'])
-        self.labels = np.array(state['labels'])
-        self.timesteps = state['timesteps']
-        self.features = state['features']
-        self.latent_dim = state['latent_dim']
-        self.lstm_units = state['lstm_units']
-        self.threshold = state['threshold']
-        self.predictions_windows = np.array(state['predictions_windows'])
-        self.anomaly_preds = np.array(state['anomaly_preds'])
-        self.anomaly_errors = np.array(state['anomaly_errors'])
-        self.predictions = np.array(state['predictions'])
-        self.losses = state['losses']
+        # As we DO need to compile for evaluation or re-training
+        self.model.compile(
+            optimizer='adam',
+            loss='mean_squared_error',
+            metrics=['mean_squared_error']
+        )
 
-        # Load the Keras model if a path is provided
-        model_path = state.get('model_path', None)
-        if model_path and os.path.exists(model_path):
-            self.model = tf.keras.models.load_model(model_path)
-            print(f"Model loaded from {model_path}")
-        else:
-            print("No model found to load.")
+        # Load data
+        self.train_data = np.load(train_path)
+        self.test_data = np.load(test_path)
+        self.labels = np.load(label_path)
+
+        # Recreate the windows with the newly loaded data
+        self.train_data_window = create_windows(self.train_data, self.timesteps)
+        self.test_data_window = create_windows(self.test_data, self.timesteps)
+
+        # Evaluate the model on the newly loaded data
+        # This will populate self.threshold, self.predictions_windows, self.anomaly_preds, etc.
+        # self.evaluate()
 
     def plot_losses(self):
         # Plot the loss values
@@ -327,7 +301,3 @@ class VariationalLSTMAutoencoder:
         plt.legend()
         plt.grid(True)
         plt.show()
-
-def set_seed(seed):
-    np.random.seed(seed)
-    tf.random.set_seed(seed)
