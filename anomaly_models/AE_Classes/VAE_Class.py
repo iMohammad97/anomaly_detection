@@ -265,19 +265,11 @@ class VariationalLSTMAutoencoder:
 
     def load_model(self, model_path: str, train_path: str, test_path: str, label_path: str):
         """Load the state of the object and the Keras model."""
-
-        # Define the Sampling layer class inside the function for proper scope
-        class Sampling(layers.Layer):
-            def call(self, inputs):
-                z_mean, z_log_var = inputs
-                batch = tf.shape(z_mean)[0]
-                dim = tf.shape(z_mean)[1]
-                epsilon = tf.keras.backend.random_normal(shape=(batch, dim))
-                return z_mean + tf.exp(0.5 * z_log_var) * epsilon
-
-        # Use custom_object_scope for loading the model
-        with custom_object_scope({'Sampling': Sampling}):
-            self.model = models.load_model(model_path, compile=False)
+        self.model = models.load_model(
+            model_path,
+            custom_objects={'Sampling': Sampling},  # Include Sampling layer here
+            compile=False
+        )
 
         # Compile the model for evaluation or retraining
         self.model.compile(
@@ -295,10 +287,6 @@ class VariationalLSTMAutoencoder:
         self.train_data_window = create_windows(self.train_data, self.timesteps)
         self.test_data_window = create_windows(self.test_data, self.timesteps)
 
-        # Evaluate the model on the newly loaded data
-        # This will populate self.threshold, self.predictions_windows, self.anomaly_preds, etc.
-        # self.evaluate()
-
     def plot_losses(self):
         # Plot the loss values
         plt.figure(figsize=(10, 6))
@@ -310,3 +298,13 @@ class VariationalLSTMAutoencoder:
         plt.legend()
         plt.grid(True)
         plt.show()
+
+
+# Define the Sampling layer globally
+class Sampling(layers.Layer):
+    def call(self, inputs):
+        z_mean, z_log_var = inputs
+        batch = tf.shape(z_mean)[0]
+        dim = tf.shape(z_mean)[1]
+        epsilon = tf.keras.backend.random_normal(shape=(batch, dim))
+        return z_mean + tf.exp(0.5 * z_log_var) * epsilon
