@@ -1,83 +1,95 @@
 import torch
 import torch.nn as nn
 import numpy as np
-from matplotlib import pyplot as plt
-from tqdm.notebook import tqdm, trange
+from tqdm.notebook import trange, tqdm
 import plotly.graph_objects as go
+import matplotlib.pyplot as plt
 
-class StudentAE(nn.Module):
-    def __init__(self, teacher, window_size: int = 256, latent_dim: int = 16, device: str = 'cpu', seed: int = 0):
-        super(StudentAE, self).__init__()
-        torch.manual_seed(seed)
-        self.name = 'StudentAE'
-        self.teacher = teacher
-        self.teacher_dim = teacher.latent_dim
-        self.window_size = window_size
+
+class StudentDecoder(nn.Module):
+    def __init__(self, teacher_latent_dim: int, hidden_dim: int = 8, lr: float = 0.0001,
+                 device: str = 'cpu'):
+        super(StudentDecoder, self).__init__()
+        self.hidden_dim = hidden_dim
+        self.teacher_latent_dim = teacher_latent_dim
         self.device = device
 
-        self.encoder = nn.Sequential(
-            nn.Linear(teacher.latent_dim, 128),
-            nn.ReLU(),
-            nn.Linear(128, 64),
-            nn.ReLU(),
-            nn.Linear(64, latent_dim),
-            nn.ReLU()
-        )
-
-        self.decoder = nn.Sequential(
-            nn.Linear(latent_dim, 64),
-            nn.ReLU(),
-            nn.Linear(64, 128),
-            nn.ReLU(),
-            nn.Linear(128, teacher.latent_dim)
-        )
+        # Fully connected layers for reconstruction
+        self.decoder_fc1 = nn.Linear(teacher_latent_dim, hidden_dim)
+        self.decoder_fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.decoder_fc3 = nn.Linear(hidden_dim, teacher_latent_dim)
 
         self.to(device)
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=0.0001)
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=lr)
         self.losses = []
 
-    def forward(self, x):
-        encoded = self.encoder(x)
-        decoded = self.decoder(encoded)
-        return encoded, decoded
+    def forward(self, embedding):
+        x = torch.relu(self.decoder_fc1(embedding))
+        x = torch.relu(self.decoder_fc2(x))
+        x = self.decoder_fc3(x)
+        return x
 
-    def learn(self, train_loader, n_epochs: int):
-        mse = nn.MSELoss().to(self.device)
+    def learn(self, teacher_model, train_loader, n_epochs: int = 10):
+        teacher_model.eval()  # Ensure the teacher is in evaluation mode
         self.train()
-        for _ in (pbar := trange(n_epochs)):
+        criterion = nn.MSELoss()
+        self.to(self.device)
+        teacher_model.to(self.device)
+
+        for _ in (pbar := trange(n_epochs, desc="Training")):
             epoch_loss = 0
-            for d, _ in tqdm(train_loader, leave=False):
-                d = d.to(self.device)
-                teacher_latent = self.teacher.encode(d)
-                _, output = self.forward(teacher_latent)
-                loss = mse(output, teacher_latent)
+            for data, _ in tqdm(train_loader, leave=False, desc="Batch Progress"):
+                data = data.to(self.device)
+
+                # Pass data through the teacher to get embeddings
+                teacher_embedding = teacher_model.encode(data)
+
+                # Pass teacher embeddings to the student model
+                reconstructed = self.forward(teacher_embedding)
+
+                # Compute reconstruction loss
+                loss = criterion(reconstructed, teacher_embedding)
+
+                # Backpropagation
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
-                epoch_loss += loss.item()
-            self.losses.append(epoch_loss / len(train_loader))
-            pbar.set_description(f'Loss: {epoch_loss / len(train_loader):.4f}')
 
-    def predict(self, data):
+                epoch_loss += loss.item()
+
+            epoch_loss /= len(train_loader)
+            self.losses.append(epoch_loss)
+            pbar.set_description(f"Epoch Loss: {epoch_loss:.4f}")
+
+    def predict(self, teacher_model, data_loader):
+        teacher_model.eval()
+        self.eval()
+
         inputs, anomalies, outputs, errors = [], [], [], []
-        for window, anomaly in data:
+        criterion = nn.MSELoss(reduction='none').to(self.device)
+
+        for window, anomaly in data_loader:
             inputs.append(window.squeeze().T[-1])
             anomalies.append(anomaly.squeeze().T[-1])
             window = window.to(self.device)
-            teacher_latent = self.teacher.encode(window)
-            _, student_output = self.forward(teacher_latent)
-            recons = self.teacher.decode(student_output)
-            outputs.append(recons.cpu().detach().numpy().squeeze().T[-1])
-            anomaly_score = torch.mean((teacher_latent - student_output) ** 2, dim=1)
-            errors.append(anomaly_score.cpu().detach().numpy().squeeze().T[-1])
+
+            with torch.no_grad():
+                teacher_embedding = teacher_model.encode(window)
+                reconstructed = self.forward(teacher_embedding)
+                error = criterion(teacher_embedding, reconstructed)
+                reconstructed = teacher_model.decode(reconstructed)
+
+            outputs.append(reconstructed.cpu().detach().numpy().squeeze().T[-1])
+            errors.append(error.cpu().detach().numpy().squeeze().T[-1])
+
         inputs = np.concatenate(inputs)
         anomalies = np.concatenate(anomalies)
         outputs = np.concatenate(outputs)
         errors = np.concatenate(errors)
         return inputs, anomalies, outputs, errors
 
-    def plot_results(self, data, plot_width: int = 800):
-        inputs, anomalies, outputs, errors = self.predict(data)
+    def plot_results(self, teacher, data, plot_width: int = 800):
+        inputs, anomalies, outputs, errors = self.predict(teacher, data)
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=list(range(len(inputs))),
                                  y=inputs,

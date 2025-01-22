@@ -65,14 +65,14 @@ class AE(nn.Module):
 
     def predict(self, data):
         inputs, anomalies, outputs, errors = [], [], [], []
-        mse = nn.MSELoss(reduction='none').to(self.device)
+        loss = nn.MSELoss(reduction='none').to(self.device)
         for window, anomaly in data:
             inputs.append(window.squeeze().T[-1])
             anomalies.append(anomaly.squeeze().T[-1])
             window = window.to(self.device)
             recons = self.forward(window)
             outputs.append(recons.cpu().detach().numpy().squeeze().T[-1])
-            errors.append(mse(window, recons).cpu().detach().numpy().squeeze().T[-1])
+            errors.append(loss(window, recons).cpu().detach().numpy().squeeze().T[-1])
         inputs = np.concatenate(inputs)
         anomalies = np.concatenate(anomalies)
         outputs = np.concatenate(outputs)
