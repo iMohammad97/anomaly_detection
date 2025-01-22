@@ -183,7 +183,7 @@ The [Reverse Distillation](https://arxiv.org/pdf/2201.10703) method.
 sample usage:
 
 ```python
-from anomaly_models.torch_models import FAE, StudentAE
+from anomaly_models.torch_models import FAE, StudentDecoder
 from utilities.torch_ucr import get_dataloaders
 
 # Dataset
@@ -195,9 +195,9 @@ teacher = FAE(window_size=256, device='cuda') # or device='cpu'
 teacher.learn(train_loader, n_epochs=10)
 
 # Training the student
-student = StudentAE(teacher)
-student.learn(train_loader, n_epochs=10)
-student.plot_losses(test_loader)
+student = StudentDecoder(teacher_latent_dim=teacher.latent_dim)
+student.learn(teacher, train_loader, n_epochs=10)
+student.plot_results(teacher, test_loader)
 ```
 
 
