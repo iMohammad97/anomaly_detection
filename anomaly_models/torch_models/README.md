@@ -177,5 +177,29 @@ model.learn(train_loader, n_epochs=10)
 model.plot_results(test_loader)
 ```
 
+## RD
+The [Reverse Distillation](https://arxiv.org/pdf/2201.10703) method.
+
+sample usage:
+
+```python
+from anomaly_models.torch_models import FAE, StudentAE
+from utilities.torch_ucr import get_dataloaders
+
+# Dataset
+dataset_path = '../../UCR/UCR2_preprocessed'
+train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=256, batch_size=64)
+
+# Training the teacher
+teacher = FAE(window_size=256, device='cuda') # or device='cpu'
+teacher.learn(train_loader, n_epochs=10)
+
+# Training the student
+student = StudentAE(teacher)
+student.learn(train_loader, n_epochs=10)
+student.plot_losses(test_loader)
+```
+
+
 # References
 - https://github.com/imperial-qore/TranAD/

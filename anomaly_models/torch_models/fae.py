@@ -30,7 +30,7 @@ class FAE(nn.Module):
         self.optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=1e-5)
         self.losses = []
 
-    def forward(self, x):
+    def encode(self, x):
         # Flatten the input for linear layers
         x = x.view(x.size(0), -1)
 
@@ -41,9 +41,10 @@ class FAE(nn.Module):
         x = torch.relu(self.encoder_fc1(x))
         x = torch.relu(self.encoder_fc2(x))
         latent = torch.relu(self.encoder_fc3(x))
+        return latent
 
-        # Decode
-        x = torch.relu(self.decoder_fc1(latent))
+    def decode(self, z):
+        x = torch.relu(self.decoder_fc1(z))
         x = torch.relu(self.decoder_fc2(x))
         x = self.decoder_fc3(x)
 
@@ -52,8 +53,13 @@ class FAE(nn.Module):
 
         # Reshape back to original shape
         x = x.view(x.size(0), self.window_size, self.n_features)
-
         return x
+
+    def forward(self, x):
+        latent = self.encode(x)
+        # Decode
+        x = self.decode(latent)
+        return latent, x
 
     def learn(self, train_loader, n_epochs: int, seed: int = 42):
         torch.manual_seed(seed)
@@ -63,7 +69,7 @@ class FAE(nn.Module):
             recons = []
             for d, a in tqdm(train_loader, leave=False):
                 d = d.to(self.device)
-                x = self.forward(d)
+                _, x = self.forward(d)
                 loss = mse(x, d)
                 recons.append(loss.item())
                 self.optimizer.zero_grad()
@@ -79,7 +85,7 @@ class FAE(nn.Module):
             inputs.append(window.squeeze().T[-1])
             anomalies.append(anomaly.squeeze().T[-1])
             window = window.to(self.device)
-            recons = self.forward(window)
+            _, recons = self.forward(window)
             outputs.append(recons.cpu().detach().numpy().squeeze().T[-1])
             errors.append(mse(window, recons).cpu().detach().numpy().squeeze().T[-1])
         inputs = np.concatenate(inputs)

@@ -13,3 +13,4 @@ from .vae import VAE
 from .sae import SAE
 from .fae import FAE
 from .dfae import DFAE
+from .rd import StudentAE
