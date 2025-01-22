@@ -100,6 +100,7 @@ model.plot_results(test_loader)
 ```
 
 ## AE
+A simple LSTM based AutoEncoder.
 
 sample usage:
 
@@ -118,6 +119,7 @@ model.plot_results(test_loader)
 ```
 
 ## VAE
+An LSTM based Variational AutoEncoder.
 
 sample usage:
 
@@ -137,6 +139,7 @@ model.plot_results(test_loader)
 
 
 ## SAE
+The Stationary AutoEncoder introduced by us.
 
 sample usage:
 
@@ -150,6 +153,26 @@ train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=256, 
 
 # Training  
 model = SAE(window_size=256, device='cuda') # or device='cpu'
+model.learn(train_loader, n_epochs=10)
+model.plot_results(test_loader)
+```
+
+
+## FAE
+The Fourier AutoEncoder applies the Fourier transform and is followed by an AutoEncoder, and it finally uses the Inverse Fourier Transform.
+
+sample usage:
+
+```python
+from anomaly_models.torch_models import FAE
+from utilities.torch_ucr import get_dataloaders
+
+# Dataset
+dataset_path = '../../UCR/UCR2_preprocessed'
+train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=256, batch_size=64)
+
+# Training  
+model = FAE(window_size=256, device='cuda') # or device='cpu'
 model.learn(train_loader, n_epochs=10)
 model.plot_results(test_loader)
 ```
