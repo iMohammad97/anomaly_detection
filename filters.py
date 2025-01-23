@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.fft import fft
+from scipy.fft import fft, ifft
 from sklearn.preprocessing import MinMaxScaler
 from scipy.stats import boxcox
 
@@ -126,11 +126,9 @@ def low_pass_filter(signal, cutoff_frequency, sampling_rate):
     # Inverse FFT to get the filtered signal
     filtered_signal = np.fft.ifft(fft_signal)
 
-    return np.real(filtered_signal)
+    return np.real(filtered_signal).reshape(-1, 1)
 
 
-import numpy as np
-from scipy.fft import fft, ifft
 
 
 def low_pass_filter_with_dynamic_cutoff(signal, sampling_rate, threshold=0.1):
@@ -187,7 +185,7 @@ def high_pass_filter(signal, cutoff_frequency, sampling_rate):
     # Inverse FFT to get the filtered signal
     filtered_signal = np.fft.ifft(fft_signal)
     
-    return np.real(filtered_signal)
+    return np.real(filtered_signal).reshape(-1, 1)
 
 
 def high_pass_filter_with_dynamic_cutoff(signal, sampling_rate, threshold=0.1):
