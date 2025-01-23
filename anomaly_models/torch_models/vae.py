@@ -62,10 +62,20 @@ class VAE(nn.Module):
         output = self.decode(z)
         return output, mu, logvar
 
-    def loss_function(self, recon_x, x, mu, logvar):
-        BCE = nn.MSELoss(reduction='mean')(recon_x, x)
+    def loss_function(self, recon_x, x, mu, logvar, loss_name: str = 'MaxDiff'):
+        BCE = self.select_loss(loss_name)
         KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
         return BCE, KLD
+
+    def select_loss(self, loss_name: str):
+        if loss_name == "MSE":
+            return nn.MSELoss(reduction='mean').to(self.device)
+        elif loss_name == "Huber":
+            return nn.SmoothL1Loss(reduction='mean').to(self.device)
+        elif loss_name == "MaxDiff":
+            return lambda inputs, target: torch.max(torch.abs(inputs - target))
+        else:
+            raise ValueError("Unsupported loss function")
 
     def learn(self, train_loader, n_epochs: int, seed: int = 42):
         torch.manual_seed(seed)

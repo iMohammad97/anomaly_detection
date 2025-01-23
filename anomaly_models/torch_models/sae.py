@@ -53,16 +53,26 @@ class SAE(nn.Module):
 
         return output
 
-    def learn(self, train_loader, n_epochs: int, seed: int = 42):
+    def select_loss(self, loss_name: str):
+        if loss_name == "MSE":
+            return nn.MSELoss(reduction='mean').to(self.device)
+        elif loss_name == "Huber":
+            return nn.SmoothL1Loss(reduction='mean').to(self.device)
+        elif loss_name == "MaxDiff":
+            return lambda inputs, target: torch.max(torch.abs(inputs - target))
+        else:
+            raise ValueError("Unsupported loss function")
+
+    def learn(self, train_loader, n_epochs: int, seed: int = 42, loss_name: str = 'MaxDiff'):
         torch.manual_seed(seed)
         self.train()
-        mse = nn.MSELoss(reduction='mean').to(self.device)
+        recon_loss = self.select_loss(loss_name)
         for _ in (pbar := trange(n_epochs)):
             recons, means, stds = [], [], []
             for d, a in tqdm(train_loader, leave=False):
                 d = d.to(self.device)
                 x = self.forward(d)
-                recon = mse(x, d)
+                recon = recon_loss(x, d)
                 mean = self.stationary_loss.mse_loss
                 std = self.stationary_loss.std_loss
                 loss = recon + mean + std

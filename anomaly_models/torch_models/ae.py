@@ -5,7 +5,6 @@ from tqdm.notebook import tqdm, trange
 import numpy as np
 import plotly.graph_objects as go
 
-
 class AE(nn.Module):
     def __init__(self, n_features: int = 1, window_size: int = 256, latent_dim: int = 32, lstm_units: int = 64, device: str = 'cpu', seed: int = 0):
         super(AE, self).__init__()
@@ -46,21 +45,31 @@ class AE(nn.Module):
 
         return output
 
-    def learn(self, train_loader, n_epochs: int, seed: int = 42):
+    def select_loss(self, loss_name: str):
+        if loss_name == "MSE":
+            return nn.MSELoss(reduction='mean').to(self.device)
+        elif loss_name == "Huber":
+            return nn.SmoothL1Loss(reduction='mean').to(self.device)
+        elif loss_name == "MaxDiff":
+            return lambda inputs, target: torch.max(torch.abs(inputs - target))
+        else:
+            raise ValueError("Unsupported loss function")
+
+    def learn(self, train_loader, n_epochs: int, loss_name: str = "MSE", seed: int = 42):
         torch.manual_seed(seed)
         self.train()
-        mse = nn.MSELoss(reduction='mean').to(self.device)
+        loss_fn = self.select_loss(loss_name)
         for _ in (pbar := trange(n_epochs)):
             recons = []
             for d, a in tqdm(train_loader, leave=False):
                 d = d.to(self.device)
                 x = self.forward(d)
-                loss = mse(x, d)
+                loss = loss_fn(x, d)
                 recons.append(loss.item())
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
-            pbar.set_description(f'MSE Loss = {np.mean(recons):.4f}')
+            pbar.set_description(f'{loss_name} Loss = {np.mean(recons):.4f}')
             self.losses.append(np.mean(recons))
 
     def predict(self, data):

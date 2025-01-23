@@ -61,21 +61,31 @@ class FAE(nn.Module):
         x = self.decode(latent)
         return latent, x
 
-    def learn(self, train_loader, n_epochs: int, seed: int = 42):
+    def select_loss(self, loss_name: str):
+        if loss_name == "MSE":
+            return nn.MSELoss(reduction='mean').to(self.device)
+        elif loss_name == "Huber":
+            return nn.SmoothL1Loss(reduction='mean').to(self.device)
+        elif loss_name == "MaxDiff":
+            return lambda inputs, target: torch.max(torch.abs(inputs - target))
+        else:
+            raise ValueError("Unsupported loss function")
+
+    def learn(self, train_loader, n_epochs: int, seed: int = 42, loss_name: str = 'MaxDiff'):
         torch.manual_seed(seed)
         self.train()
-        mse = nn.MSELoss(reduction='mean').to(self.device)
+        recon_loss = self.select_loss(loss_name)
         for _ in (pbar := trange(n_epochs)):
             recons = []
             for d, a in tqdm(train_loader, leave=False):
                 d = d.to(self.device)
                 _, x = self.forward(d)
-                loss = mse(x, d)
+                loss = recon_loss(x, d)
                 recons.append(loss.item())
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
-            pbar.set_description(f'MSE Loss = {np.mean(recons):.4f}')
+            pbar.set_description(f'{loss_name} Loss = {np.mean(recons):.4f}')
             self.losses.append(np.mean(recons))
 
     def predict(self, data):
