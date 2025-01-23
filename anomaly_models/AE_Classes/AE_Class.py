@@ -82,48 +82,48 @@ class LSTMAutoencoder:
         self.losses['valid'] = [float(loss) for loss in history.history['val_loss']]
 
 
-    def evaluate(self, batch_size=32):
-
-
+   def evaluate(self, batch_size=32, loss='mse'):
         length = self.test_data.shape[0]
         self.compute_threshold()
         # Generate predictions for the test data windows
         self.predictions_windows = self.model.predict(self.test_data_window, batch_size=batch_size)
-        max_diff = np.max(np.abs(self.test_data_window - self.predictions_windows), axis=(1, 2))
+        
+        if loss == 'mse':
+            errors = np.mean(np.square(self.test_data_window - self.predictions_windows), axis=(1, 2))
+        else:
+            errors = np.max(np.abs(self.test_data_window - self.predictions_windows), axis=(1, 2))
+        
         # Expand errors to original length
-        M = max_diff.shape[0]
+        M = errors.shape[0]
         timestep_errors = np.zeros(length)
         counts = np.zeros(length)
 
-        # Each window i covers timesteps [i, i+window_size-1]
         for i in range(M):
             start = i
             end = i + self.timesteps - 1
-            timestep_errors[start:end + 1] += mse[i]
+            timestep_errors[start:end + 1] += errors[i]
             counts[start:end + 1] += 1
 
         counts[counts == 0] = 1  # Avoid division by zero
         timestep_errors /= counts  # Average overlapping windows
 
-        # Generate anomaly predictions based on the threshold
         self.anomaly_preds = (timestep_errors > self.threshold).astype(int)
         self.anomaly_errors = timestep_errors
 
         counts = np.zeros(length)
+        self.predictions = np.zeros(length)
         for i in range(M):
             for j in range(self.timesteps):
-                timestep_index = i + j  # This is the index in the timestep corresponding to the current prediction
-                if timestep_index < length:  # Ensure we don't go out of bounds
-                    self.predictions[timestep_index] += self.predictions_windows[
-                        i, j]  # Accumulate each prediction appropriately
+                timestep_index = i + j
+                if timestep_index < length:
+                    self.predictions[timestep_index] += self.predictions_windows[i, j]
                     counts[timestep_index] += 1
 
-        # Divide by counts to get the average prediction
         for i in range(length):
             if counts[i] > 0:
                 self.predictions[i] /= counts[i]
 
-        self.predictions = np.nan_to_num(self.predictions)  # Handle any NaN values if necessary
+        self.predictions = np.nan_to_num(self.predictions)
 
     def get_latent(self, x):
         encoder_model = models.Model(inputs=self.model.input, outputs=self.model.get_layer('latent').output)
