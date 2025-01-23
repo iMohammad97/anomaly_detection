@@ -3,3 +3,4 @@ from .VAE_Class import VariationalLSTMAutoencoder
 from .ADF_Class import AugmentedDickeyFullerLSTMAutoencoder
 from .SAE_Class import StationaryLSTMAutoencoder
 from .SSAE_Class import SeasonalStationaryLSTMAutoencoder
+from .FAE_Class import FourierAutoEncoder
