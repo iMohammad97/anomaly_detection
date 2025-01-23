@@ -53,8 +53,16 @@ class LSTMAutoencoder:
 
     def train(self, batch_size=32, epochs=50, optimizer='adam', loss='mse', patience=10, shuffle: bool = False, seed: int = 42):
         set_seed(seed)
-        # Compile the model with the specified optimizer and loss function
-        self.model.compile(optimizer=optimizer, loss=loss)
+        
+        # Custom loss function to calculate max difference
+        def max_diff_loss(y_true, y_pred):
+            return tf.reduce_max(tf.abs(y_true - y_pred), axis=[1, 2])
+        
+        # Determine which loss function to use
+        loss_function = 'mse' if loss == 'mse' else max_diff_loss
+        
+        # Compile the model with the specified optimizer and selected loss function
+        self.model.compile(optimizer=optimizer, loss=loss_function)
 
         # Early stopping callback
         early_stopping = callbacks.EarlyStopping(monitor='val_loss', patience=patience, restore_best_weights=True)
@@ -75,13 +83,15 @@ class LSTMAutoencoder:
 
 
     def evaluate(self, batch_size=32):
+
+
         length = self.test_data.shape[0]
         self.compute_threshold()
         # Generate predictions for the test data windows
         self.predictions_windows = self.model.predict(self.test_data_window, batch_size=batch_size)
-        mse = np.mean(np.square(self.test_data_window - self.predictions_windows), axis=(1, 2))
+        max_diff = np.max(np.abs(self.test_data_window - self.predictions_windows), axis=(1, 2))
         # Expand errors to original length
-        M = mse.shape[0]
+        M = max_diff.shape[0]
         timestep_errors = np.zeros(length)
         counts = np.zeros(length)
 
