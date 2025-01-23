@@ -63,9 +63,10 @@ class VAE(nn.Module):
         return output, mu, logvar
 
     def loss_function(self, recon_x, x, mu, logvar, loss_name: str = 'MaxDiff'):
-        BCE = self.select_loss(loss_name)
+        loss = self.select_loss(loss_name)
+        REC = loss(recon_x, x)
         KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-        return BCE, KLD
+        return REC, KLD
 
     def select_loss(self, loss_name: str):
         if loss_name == "MSE":
@@ -77,7 +78,7 @@ class VAE(nn.Module):
         else:
             raise ValueError("Unsupported loss function")
 
-    def learn(self, train_loader, n_epochs: int, seed: int = 42):
+    def learn(self, train_loader, n_epochs: int, seed: int = 42, loss_name: str = "MaxDiff"):
         torch.manual_seed(seed)
         self.train()
         for _ in (pbar := trange(n_epochs)):
@@ -85,14 +86,14 @@ class VAE(nn.Module):
             for d, _ in tqdm(train_loader, leave=False):
                 d = d.to(self.device)
                 recon, mu, logvar = self.forward(d)
-                bce, kld = self.loss_function(recon, d, mu, logvar)
+                bce, kld = self.loss_function(recon, d, mu, logvar, loss_name=loss_name)
                 loss = bce + kld
                 mses.append(bce.item()), klds.append(kld.item())
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
             mse_mean, kld_mean = np.mean(mses), np.mean(klds)
-            pbar.set_description(f'MSE = {mse_mean:.4f}, KLD = {kld_mean:.4f}')
+            pbar.set_description(f'{loss_name} = {mse_mean:.4f}, KLD = {kld_mean:.4f}')
             self.mse_losses.append(mse_mean), self.kld_losses.append(kld_mean)
             self.losses.append(mse_mean + kld_mean)
 

@@ -1,29 +1,30 @@
 import torch
 import torch.nn as nn
-import torch.fft
-import numpy as np
 from matplotlib import pyplot as plt
 from tqdm.notebook import tqdm, trange
+import numpy as np
 import plotly.graph_objects as go
 
-class DFAE(nn.Module):
-    def __init__(self, n_features: int = 1, window_size: int = 256, latent_dim: int = 32, device: str = 'cpu', seed: int = 0):
-        super(DFAE, self).__init__()
+class MemAE(nn.Module):
+    def __init__(self, n_features: int = 1, window_size: int = 256, latent_dim: int = 32, lstm_units: int = 64, memory_size: int = 100, device: str = 'cpu', seed: int = 0):
+        super(MemAE, self).__init__()
         torch.manual_seed(seed)
-        self.name = 'DAE'
+        self.name = 'MemAE'
         self.lr = 0.0001
         self.device = device
         self.n_features = n_features
         self.window_size = window_size
         self.latent_dim = latent_dim
+        self.lstm_units = lstm_units
+        self.memory_size = memory_size
 
-        self.encoder_fc1 = nn.Linear(n_features * window_size, 128)
-        self.encoder_fc2 = nn.Linear(128, 64)
-        self.encoder_fc3 = nn.Linear(64, latent_dim)
+        self.encoder_lstm = nn.LSTM(n_features, lstm_units, batch_first=True)
+        self.fc1 = nn.Linear(lstm_units, latent_dim)
+        self.memory = nn.Parameter(torch.randn(memory_size, latent_dim))  # Memory module
 
-        self.decoder_fc1 = nn.Linear(latent_dim, 64)
-        self.decoder_fc2 = nn.Linear(64, 128)
-        self.decoder_fc3 = nn.Linear(128, n_features * window_size)
+        self.fc2 = nn.Linear(latent_dim, latent_dim)  # Corrected the dimension to latent_dim
+        self.decoder_lstm = nn.LSTM(latent_dim, lstm_units, batch_first=True)
+        self.fc3 = nn.Linear(lstm_units, n_features)
 
         self.to(device)
 
@@ -31,33 +32,22 @@ class DFAE(nn.Module):
         self.losses = []
 
     def forward(self, x):
-        # Flatten the input for linear layers
-        x = x.view(x.size(0), -1)
-
-        # Apply FFT at the beginning
-        x = torch.fft.fft(x, dim=1).real
-
         # Encode
-        x = torch.relu(self.encoder_fc1(x))
-        x = torch.relu(self.encoder_fc2(x))
-        latent = torch.relu(self.encoder_fc3(x))
+        x, _ = self.encoder_lstm(x)
+        x = x[:, -1, :]
+        latent = self.fc1(x)
+
+        # Memory read
+        attn_weights = torch.softmax(torch.mm(latent, self.memory.t()), dim=1)
+        latent = torch.mm(attn_weights, self.memory)
 
         # Decode
-        x = torch.relu(self.decoder_fc1(latent))
-        x = torch.relu(self.decoder_fc2(x))
-        x = self.decoder_fc3(x)
+        latent = self.fc2(latent)  # Corrected the linear layer dimension
+        latent_repeated = latent.unsqueeze(1).repeat(1, self.window_size, 1)
+        x, _ = self.decoder_lstm(latent_repeated)
+        output = self.fc3(x)
 
-        # Apply IFFT at the end
-        x = torch.fft.ifft(x, dim=1).real
-
-        # Reshape back to original shape
-        x = x.view(x.size(0), self.window_size, self.n_features)
-
-        return x
-
-    def add_noise(self, x, noise_factor=0.5):
-        noise = noise_factor * torch.randn_like(x)
-        return x + noise
+        return output
 
     def select_loss(self, loss_name: str):
         if loss_name == "MSE":
@@ -65,21 +55,20 @@ class DFAE(nn.Module):
         elif loss_name == "Huber":
             return nn.SmoothL1Loss(reduction='mean').to(self.device)
         elif loss_name == "MaxDiff":
-            return lambda inputs, target: torch.max(torch.abs(inputs - target))
+            return lambda input, target: torch.max(torch.abs(input - target))
         else:
             raise ValueError("Unsupported loss function")
 
-    def learn(self, train_loader, n_epochs: int, noise_factor=0.5, seed: int = 42, loss_name: str = 'MaxDiff'):
+    def learn(self, train_loader, n_epochs: int, loss_name: str = "MSE", seed: int = 42):
         torch.manual_seed(seed)
         self.train()
-        recon_loss = self.select_loss(loss_name)
+        loss_fn = self.select_loss(loss_name)
         for _ in (pbar := trange(n_epochs)):
             recons = []
             for d, a in tqdm(train_loader, leave=False):
                 d = d.to(self.device)
-                noisy_d = self.add_noise(d, noise_factor)
-                x = self.forward(noisy_d)
-                loss = recon_loss(x, d)
+                x = self.forward(d)
+                loss = loss_fn(x, d)
                 recons.append(loss.item())
                 self.optimizer.zero_grad()
                 loss.backward()
@@ -89,14 +78,14 @@ class DFAE(nn.Module):
 
     def predict(self, data):
         inputs, anomalies, outputs, errors = [], [], [], []
-        mse = nn.MSELoss(reduction='none').to(self.device)
+        loss = nn.MSELoss(reduction='none').to(self.device)
         for window, anomaly in data:
             inputs.append(window.squeeze().T[-1])
             anomalies.append(anomaly.squeeze().T[-1])
             window = window.to(self.device)
             recons = self.forward(window)
             outputs.append(recons.cpu().detach().numpy().squeeze().T[-1])
-            errors.append(mse(window, recons).cpu().detach().numpy().squeeze().T[-1])
+            errors.append(loss(window, recons).cpu().detach().numpy().squeeze().T[-1])
         inputs = np.concatenate(inputs)
         anomalies = np.concatenate(anomalies)
         outputs = np.concatenate(outputs)
@@ -159,6 +148,8 @@ class DFAE(nn.Module):
                 'n_features': self.n_features,
                 'window_size': self.window_size,
                 'latent_dim': self.latent_dim,
+                'lstm_units': self.lstm_units,
+                'memory_size': self.memory_size,
                 'device': self.device,
                 'lr': self.lr,
             }
@@ -169,10 +160,12 @@ class DFAE(nn.Module):
     def load(path: str):
         checkpoint = torch.load(path, weights_only=False)
         config = checkpoint['config']
-        model = DFAE(
+        model = MemAE(
             n_features=config['n_features'],
             window_size=config['window_size'],
             latent_dim=config['latent_dim'],
+            lstm_units=config['lstm_units'],
+            memory_size=config['memory_size'],
             device=config['device']
         )
         model.load_state_dict(checkpoint['model_state_dict'])
