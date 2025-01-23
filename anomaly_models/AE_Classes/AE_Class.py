@@ -82,7 +82,7 @@ class LSTMAutoencoder:
         self.losses['valid'] = [float(loss) for loss in history.history['val_loss']]
 
 
-   def evaluate(self, batch_size=32, loss='mse'):
+    def evaluate(self, batch_size=32, loss='mse'):
         length = self.test_data.shape[0]
         self.compute_threshold()
         # Generate predictions for the test data windows
@@ -97,19 +97,19 @@ class LSTMAutoencoder:
         M = errors.shape[0]
         timestep_errors = np.zeros(length)
         counts = np.zeros(length)
-
+    
         for i in range(M):
             start = i
             end = i + self.timesteps - 1
             timestep_errors[start:end + 1] += errors[i]
             counts[start:end + 1] += 1
-
+    
         counts[counts == 0] = 1  # Avoid division by zero
         timestep_errors /= counts  # Average overlapping windows
-
+    
         self.anomaly_preds = (timestep_errors > self.threshold).astype(int)
         self.anomaly_errors = timestep_errors
-
+    
         counts = np.zeros(length)
         self.predictions = np.zeros(length)
         for i in range(M):
@@ -118,11 +118,11 @@ class LSTMAutoencoder:
                 if timestep_index < length:
                     self.predictions[timestep_index] += self.predictions_windows[i, j]
                     counts[timestep_index] += 1
-
+    
         for i in range(length):
             if counts[i] > 0:
                 self.predictions[i] /= counts[i]
-
+    
         self.predictions = np.nan_to_num(self.predictions)
 
     def get_latent(self, x):
