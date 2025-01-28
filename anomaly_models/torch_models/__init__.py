@@ -14,3 +14,4 @@ from .sae import SAE
 from .fae import FAE
 from .dfae import DFAE
 from .rd import StudentDecoder
+from .ebm import EBM

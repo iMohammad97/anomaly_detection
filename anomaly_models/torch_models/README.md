@@ -200,6 +200,25 @@ student.learn(teacher, train_loader, n_epochs=10)
 student.plot_results(teacher, test_loader)
 ```
 
+## EBM
+A very simple energy-based model that maps windows to energy values.
+
+sample usage:
+
+```python
+from anomaly_models.torch_models import EBM
+from utilities.torch_ucr import get_dataloaders
+
+# Dataset
+dataset_path = '../../UCR/UCR2_preprocessed'
+train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=256, batch_size=64)
+
+# Training  
+model = EBM(window_size=256, device='cuda') # or device='cpu'
+model.learn(train_loader, n_epochs=10)
+model.plot_results(test_loader)
+```
+
 
 # References
 - https://github.com/imperial-qore/TranAD/
