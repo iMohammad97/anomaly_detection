@@ -6,11 +6,16 @@ from tqdm.notebook import tqdm, trange
 import numpy as np
 import plotly.graph_objects as go
 
+
+'''
+Something needs to be changed
+'''
+
 class TransformerSAE(nn.Module):
     def __init__(self, n_features: int = 1, window_size: int = 256,  mean_coef: float = 1, std_coef: float = 1, d_model: int = 64, nhead: int = 8, num_layers: int = 3, dim_feedforward: int = 256, dropout: float = 0.1, device: str = 'cpu', seed: int = 0):
         super(TransformerSAE, self).__init__()
         torch.manual_seed(seed)
-        self.name = 'TransformerAE'
+        self.name = 'TransformerSAE'
         self.lr = 0.0001
         self.device = device
         self.n_features = n_features
@@ -66,7 +71,7 @@ class TransformerSAE(nn.Module):
         else:
             raise ValueError("Unsupported loss function")
 
-    def learn(self, train_loader, n_epochs: int, loss_name: str = "MSE", seed: int = 42):
+    def learn(self, train_loader, n_epochs: int, loss_name: str = "MaxDiff", seed: int = 42):
         torch.manual_seed(seed)
         self.train()
         loss_fn = self.select_loss(loss_name)
@@ -191,23 +196,14 @@ class StationaryLoss(nn.Module):
         super(StationaryLoss, self).__init__()
         self.mean_coef = mean_coef
         self.std_coef = std_coef
-        self.mse_loss = 0
-        self.std_loss = 0
 
     def forward(self, latent):
-        # Calculate the average of the latent space
-        latent_avg = torch.mean(latent, dim=0)
-        mse_loss = torch.mean(torch.abs(latent_avg))
+        # Compute mean and std over batch and sequence dimensions
+        latent_avg = torch.mean(latent, dim=(0, 1))  # Averaging over batch and sequence
+        mse_loss = torch.mean(torch.square(latent_avg))  # Enforce near-zero mean
 
-        # Calculate the standard deviation of the latent space
-        latent_std = torch.std(latent, dim=0)
-        std_loss = torch.mean(torch.abs(latent_std - 1.0))
+        latent_std = torch.std(latent, dim=(0, 1))  # Compute std over batch and sequence
+        std_loss = torch.mean(torch.abs(latent_std - 1.0))  # Encourage unit variance
 
-        # Store the losses separately for logging
-        self.mse_loss = self.mean_coef * mse_loss
-        self.std_loss = self.std_coef * std_loss
-
-        # Add losses to the final loss
-        loss = self.mse_loss + self.std_loss
-
-        return latent, loss
+        loss = self.mean_coef * mse_loss + self.std_coef * std_loss
+        return loss

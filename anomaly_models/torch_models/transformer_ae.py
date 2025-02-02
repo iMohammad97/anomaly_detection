@@ -5,6 +5,11 @@ from tqdm.notebook import tqdm, trange
 import numpy as np
 import plotly.graph_objects as go
 
+'''
+Something needs to be changed
+'''
+
+
 class TransformerAE(nn.Module):
     def __init__(self, n_features: int = 1, window_size: int = 256, d_model: int = 64, nhead: int = 8, num_layers: int = 3, dim_feedforward: int = 256, dropout: float = 0.1, device: str = 'cpu', seed: int = 0):
         super(TransformerAE, self).__init__()
@@ -63,7 +68,7 @@ class TransformerAE(nn.Module):
         else:
             raise ValueError("Unsupported loss function")
 
-    def learn(self, train_loader, n_epochs: int, loss_name: str = "MSE", seed: int = 42):
+    def learn(self, train_loader, n_epochs: int, loss_name: str = "MaxDiff", seed: int = 42):
         torch.manual_seed(seed)
         self.train()
         loss_fn = self.select_loss(loss_name)

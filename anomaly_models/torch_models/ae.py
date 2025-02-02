@@ -55,7 +55,7 @@ class AE(nn.Module):
         else:
             raise ValueError("Unsupported loss function")
 
-    def learn(self, train_loader, n_epochs: int, loss_name: str = "MSE", seed: int = 42):
+    def learn(self, train_loader, n_epochs: int, loss_name: str = "MaxDiff", seed: int = 42):
         torch.manual_seed(seed)
         self.train()
         loss_fn = self.select_loss(loss_name)
