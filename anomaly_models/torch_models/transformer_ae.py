@@ -4,6 +4,7 @@ from matplotlib import pyplot as plt
 from tqdm.notebook import tqdm, trange
 import numpy as np
 import plotly.graph_objects as go
+import math
 
 '''
 Something needs to be changed
@@ -20,41 +21,50 @@ class TransformerAE(nn.Module):
         self.n_features = n_features
         self.window_size = window_size
         self.d_model = d_model
-        self.nhead = nhead
-        self.num_layers = num_layers
-        self.dim_feedforward = dim_feedforward
-        self.dropout = dropout
+
+        self.input_projection = nn.Linear(n_features, d_model)
+        self.pos_encoding = PositionalEncoding(d_model, max_len=window_size)
 
         self.encoder = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, dim_feedforward=dim_feedforward, dropout=dropout),
             num_layers=num_layers
         )
+
         self.decoder = nn.TransformerDecoder(
             nn.TransformerDecoderLayer(d_model=d_model, nhead=nhead, dim_feedforward=dim_feedforward, dropout=dropout),
             num_layers=num_layers
         )
 
-        self.input_projection = nn.Linear(n_features, d_model)
         self.output_projection = nn.Linear(d_model, n_features)
 
-        self.to(device)
+        # Learnable start token for decoder input
+        self.start_token = nn.Parameter(torch.randn(1, 1, d_model))
 
+        self.to(device)
         self.optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=1e-5)
         self.losses = []
 
     def forward(self, x):
-        # Project input to model dimension
-        x = self.input_projection(x)
-        x = x.permute(1, 0, 2)  # Transformer expects (S, N, E) -> (sequence_length, batch_size, embedding_dim)
+        batch_size = x.size(0)
 
-        # Encode
+        # Input projection and positional encoding
+        x = self.input_projection(x)
+        x = x.permute(1, 0, 2)  # (seq_len, batch_size, d_model)
+        x = self.pos_encoding(x)
+
+        # Encoder
         memory = self.encoder(x)
 
-        # Decode
-        output = self.decoder(x, memory)
-        output = output.permute(1, 0, 2)  # Back to (batch_size, sequence_length, embedding_dim)
+        # Decoder input: start token followed by zeros
+        start_token = self.start_token.expand(1, batch_size, -1)  # (1, batch_size, d_model)
+        tgt = torch.zeros_like(x).to(x.device)  # (seq_len, batch_size, d_model)
+        tgt[0] = start_token  # Insert start token at the beginning
 
-        # Project output to original dimension
+        # Decoder
+        output = self.decoder(tgt, memory)
+        output = output.permute(1, 0, 2)  # (batch_size, seq_len, d_model)
+
+        # Output projection
         output = self.output_projection(output)
         return output
 
@@ -186,3 +196,18 @@ class TransformerAE(nn.Module):
         model.losses = checkpoint['losses']
 
         return model
+
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, max_len=5000):
+        super(PositionalEncoding, self).__init__()
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        self.pe = pe.unsqueeze(1)  # Shape: (max_len, 1, d_model)
+
+    def forward(self, x):
+        seq_len = x.size(0)
+        return x + self.pe[:seq_len, :].to(x.device)
