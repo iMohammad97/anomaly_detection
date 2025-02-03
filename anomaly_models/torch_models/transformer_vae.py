@@ -214,7 +214,7 @@ class TransformerVAE(nn.Module):
     def load(path: str):
         checkpoint = torch.load(path)
         config = checkpoint['config']
-        model = TransformerAE(
+        model = TransformerVAE(
             n_features=config['n_features'],
             window_size=config['window_size'],
             d_model=config['d_model'],
