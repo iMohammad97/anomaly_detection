@@ -84,7 +84,7 @@ class TransformerAE(nn.Module):
         loss_fn = self.select_loss(loss_name)
         for _ in (pbar := trange(n_epochs)):
             recons = []
-            for d, a in tqdm(train_loader, leave=False):
+            for d, a in (p := tqdm(train_loader, leave=False)):
                 d = d.to(self.device)
                 x = self.forward(d)
                 loss = loss_fn(x, d)
@@ -92,6 +92,7 @@ class TransformerAE(nn.Module):
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
+                p.set_description(f'Batch Loss = {recons[-1]:.4f}')
             pbar.set_description(f'{loss_name} Loss = {np.mean(recons):.4f}')
             self.losses.append(np.mean(recons))
 

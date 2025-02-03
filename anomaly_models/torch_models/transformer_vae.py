@@ -6,22 +6,21 @@ import numpy as np
 import plotly.graph_objects as go
 import math
 
-
 '''
 Something needs to be changed
 '''
 
-class TransformerSAE(nn.Module):
-    def __init__(self, n_features: int = 1, window_size: int = 256,  mean_coef: float = 1, std_coef: float = 1, d_model: int = 64, nhead: int = 8, num_layers: int = 3, dim_feedforward: int = 256, dropout: float = 0.1, device: str = 'cpu', seed: int = 0):
-        super(TransformerSAE, self).__init__()
+
+class TransformerVAE(nn.Module):
+    def __init__(self, n_features: int = 1, window_size: int = 256, d_model: int = 64, nhead: int = 8, num_layers: int = 3, dim_feedforward: int = 256, dropout: float = 0.1, device: str = 'cpu', seed: int = 0):
+        super(TransformerVAE, self).__init__()
         torch.manual_seed(seed)
-        self.name = 'TransformerSAE'
+        self.name = 'TransformerVAE'
         self.lr = 0.0001
         self.device = device
         self.n_features = n_features
         self.window_size = window_size
-        self.mean_coef = mean_coef
-        self.std_coef = std_coef
+        self.d_model = d_model
 
         self.input_projection = nn.Linear(n_features, d_model)
         self.pos_encoding = PositionalEncoding(d_model, max_len=window_size)
@@ -30,6 +29,11 @@ class TransformerSAE(nn.Module):
             nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, dim_feedforward=dim_feedforward, dropout=dropout),
             num_layers=num_layers
         )
+
+        # Latent space
+        self.fc_mu = nn.Linear(d_model * window_size, d_model)
+        self.fc_logvar = nn.Linear(d_model * window_size, d_model)
+        self.fc_latent_to_features = nn.Linear(d_model, d_model * window_size)
 
         self.decoder = nn.TransformerDecoder(
             nn.TransformerDecoderLayer(d_model=d_model, nhead=nhead, dim_feedforward=dim_feedforward, dropout=dropout),
@@ -43,48 +47,44 @@ class TransformerSAE(nn.Module):
 
         self.to(device)
         self.optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=1e-5)
-        self.recon_losses = []
-        self.mean_losses = []
-        self.std_losses = []
+        self.recons_losses = []
+        self.latent_losses = []
 
-    def stationary_loss(self, latent, per_batch: bool = False):
-        # Compute mean and std over batch and sequence dimensions
-        latent_avg = torch.mean(latent, dim=(0, 1))  # Averaging over batch and sequence
-        mean_loss = torch.square(latent_avg) # Enforce near-zero mean
+    def encode(self, x):
+        batch_size = x.size(0)
+        x = self.input_projection(x).permute(1, 0, 2)
+        x = self.pos_encoding(x)
+        x = self.encoder(x)
+        x = x.permute(1, 0, 2).reshape(batch_size, -1)
+        mu = self.fc_mu(x)
+        logvar = self.fc_logvar(x)
+        return mu, logvar
 
-        latent_std = torch.std(latent, dim=(0, 1))  # Compute std over batch and sequence
-        std_loss = torch.abs(latent_std - 1.0) # Encourage unit variance
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
 
-        if not per_batch:
-            mean_loss = torch.mean(mean_loss)
-            std_loss = torch.mean(std_loss)
-
-        loss = self.mean_coef * mean_loss + self.std_coef * std_loss
-        return loss, mean_loss, std_loss
+    def decode(self, z, batch_size):
+        x = self.fc_latent_to_features(z).view(batch_size, self.window_size, self.d_model)
+        x = x.permute(1, 0, 2)
+        start_token = self.start_token.expand(1, batch_size, -1)
+        tgt = torch.zeros_like(x).to(x.device)
+        tgt[0] = start_token
+        x = self.decoder(tgt, x).permute(1, 0, 2)
+        return self.output_projection(x)
 
     def forward(self, x):
-        batch_size = x.size(0)
+        mu, logvar = self.encode(x)
+        z = self.reparameterize(mu, logvar)
+        x_recon = self.decode(z, x.size(0))
+        return x_recon, mu, logvar
 
-        # Input projection and positional encoding
-        x = self.input_projection(x)
-        x = x.permute(1, 0, 2)  # (seq_len, batch_size, d_model)
-        x = self.pos_encoding(x)
-
-        # Encoder
-        memory = self.encoder(x)
-
-        # Decoder input: start token followed by zeros
-        start_token = self.start_token.expand(1, batch_size, -1)  # (1, batch_size, d_model)
-        tgt = torch.zeros_like(x).to(x.device)  # (seq_len, batch_size, d_model)
-        tgt[0] = start_token  # Insert start token at the beginning
-
-        # Decoder
-        output = self.decoder(tgt, memory)
-        output = output.permute(1, 0, 2)  # (batch_size, seq_len, d_model)
-
-        # Output projection
-        output = self.output_projection(output)
-        return output, memory
+    def latent_loss(self, mu, logvar, per_batch=False):
+        if per_batch:
+            return -0.5 * (1 + logvar - mu.pow(2) - logvar.exp())
+        kl_divergence = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
+        return kl_divergence
 
     def select_loss(self, loss_name: str):
         if loss_name == "MSE":
@@ -102,63 +102,44 @@ class TransformerSAE(nn.Module):
         loss_fn = self.select_loss(loss_name)
         for _ in (pbar := trange(n_epochs)):
             recons = []
-            means, stds = [], []
+            kls = []
             for d, a in (p := tqdm(train_loader, leave=False)):
                 d = d.to(self.device)
-                x, m = self.forward(d)
-                recon = (loss_fn(x, d))
-                stat, mean, std =  self.stationary_loss(m)
-                recons.append(recon.item())
-                means.append(mean.item()), stds.append(std.item())
-                loss = recon + stat
+                x, mu, var = self.forward(d)
+                recon_loss = loss_fn(x, d)
+                kld_loss = self.latent_loss(mu, var)
+                recons.append(recon_loss.item())
+                kls.append(kld_loss.item())
+                total_loss = recon_loss + kld_loss
                 self.optimizer.zero_grad()
-                loss.backward()
+                total_loss.backward()
                 self.optimizer.step()
-                p.set_description(f'{loss_name} = {recons[-1]:.4f}, Mean = {means[-1]:.4f}, STD = {stds[-1]:.4f}')
-            pbar.set_description(f'{loss_name} = {np.mean(recons):.4f}, Mean = {np.mean(means):.4f}, STD = {np.mean(stds):.4f}')
-            self.recon_losses.append(np.mean(recons))
-            self.mean_losses.append(np.mean(means))
-            self.std_losses.append(np.mean(stds))
+                p.set_description(f'Batch {loss_name} Loss = {recons[-1]:.4f}, KL Loss = {kls[-1]:.4f}')
+            pbar.set_description(f'{loss_name} Loss = {np.mean(recons):.4f}, KL Loss = {np.mean(kls):.4f}')
+            self.recons_losses.append(np.mean(recons))
+            self.latent_losses.append(np.mean(kls))
 
     def predict(self, data):
-        inputs, anomalies, outputs, rec_errors = [], [], [], []
-        mean_errors, std_errors = [], []
-
+        inputs, anomalies, outputs, rec_errors, kld_errors = [], [], [], [], []
         loss = nn.MSELoss(reduction='none').to(self.device)
-
         for window, anomaly in data:
-            # Extract last time step for each batch in window
-            inputs.append(window[:, -1, 0].cpu().numpy())
-            anomalies.append(anomaly[:, -1, 0].cpu().numpy())
-
-            # Forward pass
+            inputs.append(window.squeeze().T[-1])
+            anomalies.append(anomaly.squeeze().T[-1])
             window = window.to(self.device)
-            recons, latent = self.forward(window)
-
-            # Extract last time step for each batch after reconstruction
-            outputs.append(recons.cpu().detach().numpy()[:, -1, 0])
-
-            # Compute reconstruction error per sample (MSE loss per time step)
-            rec_error = loss(window, recons).cpu().detach().numpy()[:, -1, 0]
-            rec_errors.append(rec_error)
-
-            # Compute stationary loss
-            _, mean, std = self.stationary_loss(latent, per_batch=True)
-            mean_errors.append(mean.cpu().detach().numpy()[:, -1, 0])
-            std_errors.append(std.cpu().detach().numpy()[:, -1, 0])
-
-        # Concatenate safely, preserving the batch structure
-        inputs = np.concatenate(inputs, axis=0)
-        anomalies = np.concatenate(anomalies, axis=0)
-        outputs = np.concatenate(outputs, axis=0)
-        rec_errors = np.concatenate(rec_errors, axis=0)
-        mean_errors = np.concatenate(mean_errors, axis=0)
-        std_errors = np.concatenate(std_errors, axis=0)
-
-        return inputs, anomalies, outputs, rec_errors, mean_errors, std_errors
+            recons, mu, var = self.forward(window)
+            outputs.append(recons.cpu().detach().numpy().squeeze().T[-1])
+            rec_errors.append(loss(window, recons).cpu().detach().numpy().squeeze().T[-1])
+            kld = self.latent_loss(mu, var, per_batch=True)
+            kld_errors.append(kld.cpu().detach().numpy().squeeze().T[-1])
+        inputs = np.concatenate(inputs)
+        anomalies = np.concatenate(anomalies)
+        outputs = np.concatenate(outputs)
+        rec_errors = np.concatenate(rec_errors)
+        kld_errors = np.concatenate(kld_errors)
+        return inputs, anomalies, outputs, rec_errors, kld_errors
 
     def plot_results(self, data, plot_width: int = 800):
-        inputs, anomalies, outputs, errors, mean_errors, std_errors = self.predict(data)
+        inputs, anomalies, outputs, rec_errors, kld_errors = self.predict(data)
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=list(range(len(inputs))),
                                  y=inputs,
@@ -170,21 +151,16 @@ class TransformerSAE(nn.Module):
                                  mode='lines',
                                  name='Predictions',
                                  line=dict(color='purple')))
-        fig.add_trace(go.Scatter(x=list(range(len(errors))),
-                                 y=errors,
+        fig.add_trace(go.Scatter(x=list(range(len(rec_errors))),
+                                 y=rec_errors,
                                  mode='lines',
                                  name='Reconstruction Errors',
                                  line=dict(color='red')))
-        fig.add_trace(go.Scatter(x=list(range(len(mean_errors))),
-                                 y=errors,
+        fig.add_trace(go.Scatter(x=list(range(len(kld_errors))),
+                                 y=kld_errors,
                                  mode='lines',
-                                 name='Mean Errors',
+                                 name='KL-Divergence Errors',
                                  line=dict(color='pink')))
-        fig.add_trace(go.Scatter(x=list(range(len(std_errors))),
-                                 y=errors,
-                                 mode='lines',
-                                 name='STD Errors',
-                                 line=dict(color='green')))
         label_indices = [i for i in range(len(anomalies)) if anomalies[i] == 1]
         if label_indices:
             fig.add_trace(go.Scatter(x=label_indices,
@@ -201,11 +177,10 @@ class TransformerSAE(nn.Module):
         fig.show()
 
     def plot_losses(self, fig_size=(10, 6)):
-        xs = np.arange(len(self.recon_losses)) + 1
+        xs = np.arange(len(self.recons_losses)) + 1
         plt.figure(figsize=fig_size)
-        plt.plot(xs, self.recon_losses, label='Reconstruction Loss')
-        plt.plot(xs, self.mean_losses, label='Mean Loss')
-        plt.plot(xs, self.std_losses, label='STD Loss')
+        plt.plot(xs, self.recons_losses, label='Reconstruction Loss')
+        plt.plot(xs, self.latent_losses, label='KL-Divergence Loss')
         plt.grid()
         plt.xticks(xs)
         plt.legend()
@@ -216,11 +191,11 @@ class TransformerSAE(nn.Module):
         Save the model, optimizer state, and training history to a file.
         """
         if path == '':
-            path = self.name + '_' + str(len(self.recon_losses)).zfill(3) + '.pth'
+            path = self.name + '_' + str(len(self.recons_losses)).zfill(3) + '.pth'
         torch.save({
             'model_state_dict': self.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
-            'losses': self.recon_losses,
+            'losses': self.recons_losses,
             'config': {
                 'n_features': self.n_features,
                 'window_size': self.window_size,
@@ -239,7 +214,7 @@ class TransformerSAE(nn.Module):
     def load(path: str):
         checkpoint = torch.load(path)
         config = checkpoint['config']
-        model = TransformerSAE(
+        model = TransformerAE(
             n_features=config['n_features'],
             window_size=config['window_size'],
             d_model=config['d_model'],
@@ -251,7 +226,7 @@ class TransformerSAE(nn.Module):
         )
         model.load_state_dict(checkpoint['model_state_dict'])
         model.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        model.recon_losses = checkpoint['losses']
+        model.recons_losses = checkpoint['losses']
 
         return model
 

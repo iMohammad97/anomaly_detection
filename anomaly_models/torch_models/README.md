@@ -219,6 +219,25 @@ model.learn(train_loader, n_epochs=10)
 model.plot_results(test_loader)
 ```
 
+## Transformers
+
+The Transformer version of AE, VAE, and SAE (so far).
+
+```python
+from anomaly_models.torch_models import TransformerAE, TransformerVAE, TransformerSAE
+from utilities.torch_ucr import get_dataloaders
+
+# Dataset
+dataset_path = '../../UCR/UCR2_preprocessed'
+train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=256, batch_size=16)
+
+# Training  
+model = TransformerAE(window_size=256, device='cuda') # or TransformerVAE, or TransformerSAE
+model.learn(train_loader, n_epochs=10)
+model.plot_results(test_loader)
+```
+
+
 
 # References
 - https://github.com/imperial-qore/TranAD/

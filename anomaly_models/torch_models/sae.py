@@ -87,6 +87,7 @@ class SAE(nn.Module):
 
     def predict(self, data, name: str = ''):
         inputs, anomalies, outputs, errors = [], [], [], []
+        means, stds = [], []
         mse = nn.MSELoss(reduction='none').to(self.device)
         for window, anomaly in data:  # tqdm(data, leave=False, desc=f'Predicting {name}'):
             # Save the original data
@@ -99,14 +100,18 @@ class SAE(nn.Module):
             outputs.append(recons.cpu().detach().numpy().squeeze().T[-1])
             # Save error
             errors.append(mse(window, recons).cpu().detach().numpy().squeeze().T[-1])
+            means.append(self.stationary_loss.mse_loss.cpu().detach().numpy())
+            stds.append(self.stationary_loss.std_loss.cpu().detach().numpy())
         inputs = np.concatenate(inputs)
         anomalies = np.concatenate(anomalies)
         outputs = np.concatenate(outputs)
         errors = np.concatenate(errors)
-        return inputs, anomalies, outputs, errors
+        means = np.array(means)
+        stds = np.array(stds)
+        return inputs, anomalies, outputs, errors, means, stds
 
     def plot_results(self, data, plot_width: int = 800):
-        inputs, anomalies, outputs, errors = self.predict(data)
+        inputs, anomalies, outputs, errors, means, stds = self.predict(data)
 
         # Create a figure
         fig = go.Figure()
@@ -128,6 +133,18 @@ class SAE(nn.Module):
                                  y=errors,
                                  mode='lines',
                                  name='Anomaly Errors',
+                                 line=dict(color='red')))
+
+        fig.add_trace(go.Scatter(x=list(range(len(means))),
+                                 y=errors,
+                                 mode='lines',
+                                 name='Mean Errors',
+                                 line=dict(color='red')))
+
+        fig.add_trace(go.Scatter(x=list(range(len(stds))),
+                                 y=errors,
+                                 mode='lines',
+                                 name='STD Errors',
                                  line=dict(color='red')))
 
         # Highlight points in test_data where label is 1

@@ -11,6 +11,7 @@ from .cae_m import CAE_M
 from .ae import AE
 from .transformer_ae import TransformerAE
 from .vae import VAE
+from .transformer_vae import TransformerVAE
 from .sae import SAE
 from .transformer_sae import TransformerSAE
 from .fae import FAE
