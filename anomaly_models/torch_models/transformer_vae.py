@@ -199,7 +199,8 @@ class TransformerVAE(nn.Module):
         torch.save({
             'model_state_dict': self.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
-            'losses': self.recons_losses,
+            'recons_losses': self.recons_losses,
+            'latent_losses': self.latent_losses,
             'config': {
                 'n_features': self.n_features,
                 'window_size': self.window_size,
@@ -230,7 +231,8 @@ class TransformerVAE(nn.Module):
         )
         model.load_state_dict(checkpoint['model_state_dict'])
         model.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        model.recons_losses = checkpoint['losses']
+        model.recons_losses = checkpoint['recons_losses']
+        model.latent_losses = checkpoint['latent_losses']
 
         return model
 

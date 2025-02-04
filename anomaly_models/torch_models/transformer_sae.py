@@ -225,7 +225,9 @@ class TransformerSAE(nn.Module):
         torch.save({
             'model_state_dict': self.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
-            'losses': self.recon_losses,
+            'recon_losses': self.recon_losses,
+            'mean_losses': self.mean_losses,
+            'std_losses': self.std_losses,
             'config': {
                 'n_features': self.n_features,
                 'window_size': self.window_size,
@@ -256,7 +258,9 @@ class TransformerSAE(nn.Module):
         )
         model.load_state_dict(checkpoint['model_state_dict'])
         model.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        model.recon_losses = checkpoint['losses']
+        model.recon_losses = checkpoint['recon_losses']
+        model.mean_losses = checkpoint['mean_losses']
+        model.std_losses = checkpoint['std_losses']
 
         return model
 
