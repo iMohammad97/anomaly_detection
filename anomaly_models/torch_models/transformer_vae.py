@@ -21,6 +21,10 @@ class TransformerVAE(nn.Module):
         self.n_features = n_features
         self.window_size = window_size
         self.d_model = d_model
+        self.nhead = nhead
+        self.num_layers = num_layers
+        self.dim_feedforward = dim_feedforward
+        self.dropout = dropout
 
         self.input_projection = nn.Linear(n_features, d_model)
         self.pos_encoding = PositionalEncoding(d_model, max_len=window_size)
