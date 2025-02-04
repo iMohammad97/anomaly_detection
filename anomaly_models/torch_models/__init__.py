@@ -31,3 +31,6 @@ from .ebmwld import EBMwLD # EBM with Langevin Dynamics
 # Kolmogorov-Arnold Network AutoEncoder (in beta mode)
 from .kan import KANAE
 
+# Memory Based Models
+from mem_ae import MemAE # AE with Memory
+
