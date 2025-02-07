@@ -32,5 +32,5 @@ from .ebmwld import EBMwLD # EBM with Langevin Dynamics
 from .kan import KANAE
 
 # Memory Based Models
-from mem_ae import MemAE # AE with Memory
+from .mem_ae import MemAE # AE with Memory
 
