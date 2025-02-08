@@ -91,6 +91,7 @@ class FAE(nn.Module):
             self.losses.append(np.mean(recons))
 
     def predict(self, data, train: bool = False):
+        self.eval()
         results = {}
         inputs, anomalies, outputs, errors = [], [], [], []
         mse = nn.MSELoss(reduction='none').to(self.device)
@@ -143,7 +144,7 @@ class FAE(nn.Module):
                                      y=[results['inputs'][i] for i in label_indices],
                                      mode='markers',
                                      name='Predictions on Test Data',
-                                     marker=dict(color='black', size=10)))
+                                     marker=dict(color='black', size=7, symbol='x')))
         fig.update_layout(title='Test Data, Predictions, and Anomalies',
                           xaxis_title='Time Steps',
                           yaxis_title='Value',
