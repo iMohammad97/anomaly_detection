@@ -1,8 +1,7 @@
 # TODO List:
 # 	- Review code to make sure it works as intended
-# 	- Make it possible to use GPU devices
 # 	- Alter predict method to do what we might want
-#   - Store losses separately based on their type (i.e. MSE and KLD in VAE)
+#   - Add thresholding capability to the rest of the models
 
 # From papers (and TranAD repository)
 from .dagmm import DAGMM

@@ -35,6 +35,8 @@ class SAE(nn.Module):
         self.mean_losses = []
         self.std_losses = []
 
+        self.threshold = None
+
     def forward(self, x):
         # Encode
         x, _ = self.encoder_lstm1(x)
@@ -85,7 +87,9 @@ class SAE(nn.Module):
             self.recon_losses.append(rl), self.mean_losses.append(ml)
             self.std_losses.append(sl), self.losses.append(rl + ml + sl)
 
-    def predict(self, data, name: str = ''):
+    def predict(self, data, train: bool = False):
+        self.eval()
+        results = {}
         inputs, anomalies, outputs, errors = [], [], [], []
         means, stds = [], []
         mse = nn.MSELoss(reduction='none').to(self.device)
@@ -102,60 +106,71 @@ class SAE(nn.Module):
             errors.append(mse(window, recons).cpu().detach().numpy().squeeze().T[-1])
             means.append(self.stationary_loss.mse_loss.cpu().detach().numpy())
             stds.append(self.stationary_loss.std_loss.cpu().detach().numpy())
-        inputs = np.concatenate(inputs)
-        anomalies = np.concatenate(anomalies)
-        outputs = np.concatenate(outputs)
-        errors = np.concatenate(errors)
-        means = np.array(means)
-        stds = np.array(stds)
-        return inputs, anomalies, outputs, errors, means, stds
+        results['inputs'] = np.concatenate(inputs)
+        results['anomalies'] = np.concatenate(anomalies)
+        results['outputs'] = np.concatenate(outputs)
+        results['errors'] = np.concatenate(errors)
+        results['means'] = np.array(means)
+        results['stds'] = np.array(stds)
+        if train:
+            self.threshold = np.mean(results['errors']) + 3 * np.std(results['errors'])
+        elif not train and self.threshold is not None:
+            results['predictions'] = [1 if error > self.threshold else 0 for error in results['errors']]
+        return results
 
-    def plot_results(self, data, plot_width: int = 800):
-        inputs, anomalies, outputs, errors, means, stds = self.predict(data)
+    def plot_results(self, data, train: bool = False, plot_width: int = 800):
+        results = self.predict(data, train=train)
 
         # Create a figure
         fig = go.Figure()
 
         # Add traces for test data, predictions, and anomaly errors
-        fig.add_trace(go.Scatter(x=list(range(len(inputs))),
-                                 y=inputs,
+        fig.add_trace(go.Scatter(x=list(range(len(results['inputs']))),
+                                 y=results['inputs'],
                                  mode='lines',
                                  name='Test Data',
                                  line=dict(color='blue')))
 
-        fig.add_trace(go.Scatter(x=list(range(len(outputs))),
-                                 y=outputs,
+        fig.add_trace(go.Scatter(x=list(range(len(results['outputs']))),
+                                 y=results['outputs'],
                                  mode='lines',
                                  name='Predictions',
                                  line=dict(color='purple')))
 
-        fig.add_trace(go.Scatter(x=list(range(len(errors))),
-                                 y=errors,
+        fig.add_trace(go.Scatter(x=list(range(len(results['errors']))),
+                                 y=results['errors'],
                                  mode='lines',
                                  name='Anomaly Errors',
                                  line=dict(color='red')))
 
-        fig.add_trace(go.Scatter(x=list(range(len(means))),
-                                 y=errors,
+        fig.add_trace(go.Scatter(x=list(range(len(results['means']))),
+                                 y=results['means'],
                                  mode='lines',
                                  name='Mean Errors',
                                  line=dict(color='red')))
 
-        fig.add_trace(go.Scatter(x=list(range(len(stds))),
-                                 y=errors,
+        fig.add_trace(go.Scatter(x=list(range(len(results['stds']))),
+                                 y=results['errors'],
                                  mode='lines',
                                  name='STD Errors',
                                  line=dict(color='red')))
 
         # Highlight points in test_data where label is 1
-        label_indices = [i for i in range(len(anomalies)) if anomalies[i] == 1]
+        label_indices = [i for i in range(len(results['anomalies'])) if results['anomalies'][i] == 1]
         if label_indices:
             fig.add_trace(go.Scatter(x=label_indices,
-                                     y=[inputs[i] for i in label_indices],
+                                     y=[results['inputs'][i] for i in label_indices],
                                      mode='markers',
                                      name='Labels on Test Data',
                                      marker=dict(color='orange', size=10)))
-
+        if self.threshold is not None and not train:
+            label_indices = [i for i in range(len(results['anomalies'])) if results['predictions'][i] == 1]
+            fig.add_hline(y=self.threshold, name='Threshold')
+            fig.add_trace(go.Scatter(x=label_indices,
+                                     y=[results['inputs'][i] for i in label_indices],
+                                     mode='markers',
+                                     name='Predictions on Test Data',
+                                     marker=dict(color='black', size=7, symbol='x')))
         # Set the layout
         fig.update_layout(title='Test Data, Predictions, and Anomalies',
                           xaxis_title='Time Steps',
