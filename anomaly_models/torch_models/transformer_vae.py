@@ -6,10 +6,6 @@ import numpy as np
 import plotly.graph_objects as go
 import math
 
-'''
-Something needs to be changed
-'''
-
 
 class TransformerVAE(nn.Module):
     def __init__(self, n_features: int = 1, window_size: int = 256, d_model: int = 64, nhead: int = 8, num_layers: int = 3, dim_feedforward: int = 256, dropout: float = 0.1, device: str = 'cpu', seed: int = 0):
@@ -53,6 +49,8 @@ class TransformerVAE(nn.Module):
         self.optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=1e-5)
         self.recons_losses = []
         self.latent_losses = []
+
+        self.threshold = None
 
     def encode(self, x):
         batch_size = x.size(0)
@@ -123,10 +121,14 @@ class TransformerVAE(nn.Module):
             self.recons_losses.append(np.mean(recons))
             self.latent_losses.append(np.mean(kls))
 
-    def predict(self, data):
+    def predict(self, data, train: bool = False):
+        self.eval()
+        results = {}
         inputs, anomalies, outputs, rec_errors, kld_errors = [], [], [], [], []
         loss = nn.MSELoss(reduction='none').to(self.device)
         for window, anomaly in data:
+            if window.shape[0] == 1:
+                break
             inputs.append(window.squeeze().T[-1])
             anomalies.append(anomaly.squeeze().T[-1])
             window = window.to(self.device)
@@ -135,43 +137,55 @@ class TransformerVAE(nn.Module):
             rec_errors.append(loss(window, recons).cpu().detach().numpy().squeeze().T[-1])
             kld = self.latent_loss(mu, var, per_batch=True)
             kld_errors.append(kld.cpu().detach().numpy().squeeze().T[-1])
-        inputs = np.concatenate(inputs)
-        anomalies = np.concatenate(anomalies)
-        outputs = np.concatenate(outputs)
-        rec_errors = np.concatenate(rec_errors)
-        kld_errors = np.concatenate(kld_errors)
-        return inputs, anomalies, outputs, rec_errors, kld_errors
+        results['inputs'] = np.concatenate(inputs)
+        results['anomalies'] = np.concatenate(anomalies)
+        results['outputs'] = np.concatenate(outputs)
+        results['errors'] = np.concatenate(rec_errors)
+        results['kld'] = np.concatenate(kld_errors)
+        if train:
+            self.threshold = np.mean(results['errors']) + 3 * np.std(results['errors'])
+        elif not train and self.threshold is not None:
+            results['predictions'] = [1 if error > self.threshold else 0 for error in results['errors']]
+        return results
 
-    def plot_results(self, data, plot_width: int = 800):
-        inputs, anomalies, outputs, rec_errors, kld_errors = self.predict(data)
+    def plot_results(self, data, train: bool = False, plot_width: int = 800):
+        results = self.predict(data, train)
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=list(range(len(inputs))),
-                                 y=inputs,
+        fig.add_trace(go.Scatter(x=list(range(len(results['inputs']))),
+                                 y=results['inputs'],
                                  mode='lines',
                                  name='Test Data',
                                  line=dict(color='blue')))
-        fig.add_trace(go.Scatter(x=list(range(len(outputs))),
-                                 y=outputs,
+        fig.add_trace(go.Scatter(x=list(range(len(results['outputs']))),
+                                 y=results['outputs'],
                                  mode='lines',
                                  name='Predictions',
                                  line=dict(color='purple')))
-        fig.add_trace(go.Scatter(x=list(range(len(rec_errors))),
-                                 y=rec_errors,
+        fig.add_trace(go.Scatter(x=list(range(len(results['errors']))),
+                                 y=results['errors'],
                                  mode='lines',
                                  name='Reconstruction Errors',
                                  line=dict(color='red')))
-        fig.add_trace(go.Scatter(x=list(range(len(kld_errors))),
-                                 y=kld_errors,
+        fig.add_trace(go.Scatter(x=list(range(len(results['kld']))),
+                                 y=results['kld'],
                                  mode='lines',
                                  name='KL-Divergence Errors',
-                                 line=dict(color='pink')))
-        label_indices = [i for i in range(len(anomalies)) if anomalies[i] == 1]
+                                 line=dict(color='green')))
+        label_indices = [i for i in range(len(results['anomalies'])) if results['anomalies'][i] == 1]
         if label_indices:
             fig.add_trace(go.Scatter(x=label_indices,
-                                     y=[inputs[i] for i in label_indices],
+                                     y=[results['inputs'][i] for i in label_indices],
                                      mode='markers',
                                      name='Labels on Test Data',
                                      marker=dict(color='orange', size=10)))
+        if self.threshold is not None and not train:
+            label_indices = [i for i in range(len(results['anomalies'])) if results['predictions'][i] == 1]
+            fig.add_hline(y=self.threshold, name='Threshold')
+            fig.add_trace(go.Scatter(x=label_indices,
+                                     y=[results['inputs'][i] for i in label_indices],
+                                     mode='markers',
+                                     name='Predictions on Test Data',
+                                     marker=dict(color='black', size=7, symbol='x')))
         fig.update_layout(title='Test Data, Predictions, and Anomalies',
                           xaxis_title='Time Steps',
                           yaxis_title='Value',
