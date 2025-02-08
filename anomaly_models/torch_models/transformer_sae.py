@@ -51,13 +51,14 @@ class TransformerSAE(nn.Module):
         self.recon_losses = []
         self.mean_losses = []
         self.std_losses = []
+        self.threshold = None
 
     def stationary_loss(self, latent, per_batch: bool = False):
         # Compute mean and std over batch and sequence dimensions
-        latent_avg = torch.mean(latent, dim=(0, 1))  # Averaging over batch and sequence
+        latent_avg = torch.mean(latent, dim=(0, 2))  # Averaging over batch and sequence
         mean_loss = torch.square(latent_avg) # Enforce near-zero mean
 
-        latent_std = torch.std(latent, dim=(0, 1))  # Compute std over batch and sequence
+        latent_std = torch.std(latent, dim=(0, 2))  # Compute std over batch and sequence
         std_loss = torch.abs(latent_std - 1.0) # Encourage unit variance
 
         if not per_batch:
@@ -125,78 +126,86 @@ class TransformerSAE(nn.Module):
             self.mean_losses.append(np.mean(means))
             self.std_losses.append(np.mean(stds))
 
-    def predict(self, data):
+    def predict(self, data, train: bool = False):
+        self.eval()
+        results = {}
         inputs, anomalies, outputs, rec_errors = [], [], [], []
         mean_errors, std_errors = [], []
-
         loss = nn.MSELoss(reduction='none').to(self.device)
-
         for window, anomaly in data:
-            # Extract last time step for each batch in window
-            inputs.append(window[:, -1, 0].cpu().numpy())
-            anomalies.append(anomaly[:, -1, 0].cpu().numpy())
+            if window.shape[0] == 1:
+                break
+            inputs.append(window.squeeze().T[-1])
+            anomalies.append(anomaly.squeeze().T[-1])
 
-            # Forward pass
             window = window.to(self.device)
             recons, latent = self.forward(window)
 
-            # Extract last time step for each batch after reconstruction
-            outputs.append(recons.cpu().detach().numpy()[:, -1, 0])
+            outputs.append(recons.cpu().detach().numpy().squeeze().T[-1])
 
-            # Compute reconstruction error per sample (MSE loss per time step)
-            rec_error = loss(window, recons).cpu().detach().numpy()[:, -1, 0]
+            rec_error = loss(window, recons).cpu().detach().numpy().squeeze().T[-1]
             rec_errors.append(rec_error)
 
-            # Compute stationary loss
             _, mean, std = self.stationary_loss(latent, per_batch=True)
-            mean_errors.append(mean.cpu().detach().numpy()[:, -1, 0])
-            std_errors.append(std.cpu().detach().numpy()[:, -1, 0])
+            mean_errors.append(mean.cpu().detach().numpy().squeeze())
+            std_errors.append(std.cpu().detach().numpy().squeeze())
 
         # Concatenate safely, preserving the batch structure
-        inputs = np.concatenate(inputs, axis=0)
-        anomalies = np.concatenate(anomalies, axis=0)
-        outputs = np.concatenate(outputs, axis=0)
-        rec_errors = np.concatenate(rec_errors, axis=0)
-        mean_errors = np.concatenate(mean_errors, axis=0)
-        std_errors = np.concatenate(std_errors, axis=0)
+        results['inputs'] = np.concatenate(inputs)
+        results['anomalies'] = np.concatenate(anomalies)
+        results['outputs'] = np.concatenate(outputs)
+        results['errors'] = np.concatenate(rec_errors)
+        results['means'] = np.concatenate(mean_errors)
+        results['stds'] = np.concatenate(std_errors)
+        if train:
+            self.threshold = np.mean(results['errors']) + 3 * np.std(results['errors'])
+        elif not train and self.threshold is not None:
+            results['predictions'] = [1 if error > self.threshold else 0 for error in results['errors']]
+        return results
 
-        return inputs, anomalies, outputs, rec_errors, mean_errors, std_errors
-
-    def plot_results(self, data, plot_width: int = 800):
-        inputs, anomalies, outputs, errors, mean_errors, std_errors = self.predict(data)
+    def plot_results(self, data, train: bool = False, plot_width: int = 800):
+        results = self.predict(data, train)
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=list(range(len(inputs))),
-                                 y=inputs,
+        fig.add_trace(go.Scatter(x=list(range(len(results['inputs']))),
+                                 y=results['inputs'],
                                  mode='lines',
                                  name='Test Data',
                                  line=dict(color='blue')))
-        fig.add_trace(go.Scatter(x=list(range(len(outputs))),
-                                 y=outputs,
+        fig.add_trace(go.Scatter(x=list(range(len(results['outputs']))),
+                                 y=results['outputs'],
                                  mode='lines',
                                  name='Predictions',
                                  line=dict(color='purple')))
-        fig.add_trace(go.Scatter(x=list(range(len(errors))),
-                                 y=errors,
+        fig.add_trace(go.Scatter(x=list(range(len(results['errors']))),
+                                 y=results['errors'],
                                  mode='lines',
                                  name='Reconstruction Errors',
                                  line=dict(color='red')))
-        fig.add_trace(go.Scatter(x=list(range(len(mean_errors))),
-                                 y=errors,
+        fig.add_trace(go.Scatter(x=list(range(len(results['means']))),
+                                 y=results['errors'],
                                  mode='lines',
                                  name='Mean Errors',
                                  line=dict(color='pink')))
-        fig.add_trace(go.Scatter(x=list(range(len(std_errors))),
-                                 y=errors,
+        fig.add_trace(go.Scatter(x=list(range(len(results['stds']))),
+                                 y=results['errors'],
                                  mode='lines',
                                  name='STD Errors',
                                  line=dict(color='green')))
-        label_indices = [i for i in range(len(anomalies)) if anomalies[i] == 1]
+        label_indices = [i for i in range(len(results['anomalies'])) if results['anomalies'][i] == 1]
         if label_indices:
             fig.add_trace(go.Scatter(x=label_indices,
-                                     y=[inputs[i] for i in label_indices],
+                                     y=[results['inputs'][i] for i in label_indices],
                                      mode='markers',
                                      name='Labels on Test Data',
                                      marker=dict(color='orange', size=10)))
+        if self.threshold is not None and not train:
+            label_indices = [i for i in range(len(results['anomalies'])) if results['predictions'][i] == 1]
+            fig.add_hline(y=self.threshold, name='Threshold')
+            fig.add_trace(go.Scatter(x=label_indices,
+                                     y=[results['inputs'][i] for i in label_indices],
+                                     mode='markers',
+                                     name='Predictions on Test Data',
+                                     marker=dict(color='black', size=7, symbol='x')))
         fig.update_layout(title='Test Data, Predictions, and Anomalies',
                           xaxis_title='Time Steps',
                           yaxis_title='Value',

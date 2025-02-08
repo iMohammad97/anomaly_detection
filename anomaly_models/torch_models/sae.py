@@ -17,7 +17,9 @@ class SAE(nn.Module):
         self.window_size = window_size
         self.latent_dim = latent_dim
         self.lstm_units = lstm_units
-        self.stationary_loss = StationaryLoss(mean_coef, std_coef)
+        self.mean_coef = mean_coef
+        self.std_coef = std_coef
+        # self.stationary_loss = StationaryLoss(mean_coef, std_coef)
 
         self.encoder_lstm1 = nn.LSTM(n_features, lstm_units, batch_first=True)
         self.encoder_lstm2 = nn.LSTM(lstm_units, lstm_units, batch_first=True)
@@ -45,15 +47,30 @@ class SAE(nn.Module):
         latent = x[:, -1, :]
 
         # Apply custom loss to the latent space
-        latent_with_loss, _ = self.stationary_loss(latent)
+        # latent_with_loss, _ = self.stationary_loss(latent)
 
         # Decode
-        latent_repeated = latent_with_loss.unsqueeze(1).repeat(1, self.window_size, 1)
+        latent_repeated = latent.unsqueeze(1).repeat(1, self.window_size, 1)
         x, _ = self.decoder_lstm1(latent_repeated)
         x, _ = self.decoder_lstm2(x)
         output, _ = self.decoder_lstm3(x)
 
-        return output
+        return output, latent
+
+    def stationary_loss(self, latent, per_batch: bool = False):
+        # Compute mean and std over batch and sequence dimensions
+        latent_avg = torch.mean(latent, dim=1)  # Averaging over batch and sequence
+        mean_loss = torch.square(latent_avg) # Enforce near-zero mean
+
+        latent_std = torch.std(latent, dim=1)  # Compute std over batch and sequence
+        std_loss = torch.abs(latent_std - 1.0) # Encourage unit variance
+
+        if not per_batch:
+            mean_loss = torch.mean(mean_loss)
+            std_loss = torch.mean(std_loss)
+
+        loss = self.mean_coef * mean_loss + self.std_coef * std_loss
+        return loss, mean_loss, std_loss
 
     def select_loss(self, loss_name: str):
         if loss_name == "MSE":
@@ -73,10 +90,11 @@ class SAE(nn.Module):
             recons, means, stds = [], [], []
             for d, a in tqdm(train_loader, leave=False):
                 d = d.to(self.device)
-                x = self.forward(d)
+                x, latent = self.forward(d)
                 recon = recon_loss(x, d)
-                mean = self.stationary_loss.mse_loss
-                std = self.stationary_loss.std_loss
+                # mean = self.stationary_loss.mse_loss
+                # std = self.stationary_loss.std_loss
+                _, mean, std = self.stationary_loss(latent)
                 loss = recon + mean + std
                 recons.append(recon.item()), means.append(mean.item()), stds.append(std.item())
                 self.optimizer.zero_grad()
@@ -90,28 +108,34 @@ class SAE(nn.Module):
     def predict(self, data, train: bool = False):
         self.eval()
         results = {}
-        inputs, anomalies, outputs, errors = [], [], [], []
-        means, stds = [], []
-        mse = nn.MSELoss(reduction='none').to(self.device)
-        for window, anomaly in data:  # tqdm(data, leave=False, desc=f'Predicting {name}'):
-            # Save the original data
+        inputs, anomalies, outputs, rec_errors = [], [], [], []
+        mean_errors, std_errors = [], []
+        loss = nn.MSELoss(reduction='none').to(self.device)
+        for window, anomaly in data:
+            if window.shape[0] == 1:
+                break
             inputs.append(window.squeeze().T[-1])
             anomalies.append(anomaly.squeeze().T[-1])
-            # Predict outputs
+
             window = window.to(self.device)
-            recons = self.forward(window)
-            # Save outputs
+            recons, latent = self.forward(window)
+
             outputs.append(recons.cpu().detach().numpy().squeeze().T[-1])
-            # Save error
-            errors.append(mse(window, recons).cpu().detach().numpy().squeeze().T[-1])
-            means.append(self.stationary_loss.mse_loss.cpu().detach().numpy())
-            stds.append(self.stationary_loss.std_loss.cpu().detach().numpy())
+
+            rec_error = loss(window, recons).cpu().detach().numpy().squeeze().T[-1]
+            rec_errors.append(rec_error)
+
+            _, mean, std = self.stationary_loss(latent, per_batch=True)
+            mean_errors.append(mean.cpu().detach().numpy().squeeze())
+            std_errors.append(std.cpu().detach().numpy().squeeze())
+
+        # Concatenate safely, preserving the batch structure
         results['inputs'] = np.concatenate(inputs)
         results['anomalies'] = np.concatenate(anomalies)
         results['outputs'] = np.concatenate(outputs)
-        results['errors'] = np.concatenate(errors)
-        results['means'] = np.array(means)
-        results['stds'] = np.array(stds)
+        results['errors'] = np.concatenate(rec_errors)
+        results['means'] = np.concatenate(mean_errors)
+        results['stds'] = np.concatenate(std_errors)
         if train:
             self.threshold = np.mean(results['errors']) + 3 * np.std(results['errors'])
         elif not train and self.threshold is not None:
@@ -119,43 +143,33 @@ class SAE(nn.Module):
         return results
 
     def plot_results(self, data, train: bool = False, plot_width: int = 800):
-        results = self.predict(data, train=train)
-
-        # Create a figure
+        results = self.predict(data, train)
         fig = go.Figure()
-
-        # Add traces for test data, predictions, and anomaly errors
         fig.add_trace(go.Scatter(x=list(range(len(results['inputs']))),
                                  y=results['inputs'],
                                  mode='lines',
                                  name='Test Data',
                                  line=dict(color='blue')))
-
         fig.add_trace(go.Scatter(x=list(range(len(results['outputs']))),
                                  y=results['outputs'],
                                  mode='lines',
                                  name='Predictions',
                                  line=dict(color='purple')))
-
         fig.add_trace(go.Scatter(x=list(range(len(results['errors']))),
                                  y=results['errors'],
                                  mode='lines',
-                                 name='Anomaly Errors',
+                                 name='Reconstruction Errors',
                                  line=dict(color='red')))
-
         fig.add_trace(go.Scatter(x=list(range(len(results['means']))),
-                                 y=results['means'],
+                                 y=results['errors'],
                                  mode='lines',
                                  name='Mean Errors',
-                                 line=dict(color='red')))
-
+                                 line=dict(color='pink')))
         fig.add_trace(go.Scatter(x=list(range(len(results['stds']))),
                                  y=results['errors'],
                                  mode='lines',
                                  name='STD Errors',
-                                 line=dict(color='red')))
-
-        # Highlight points in test_data where label is 1
+                                 line=dict(color='green')))
         label_indices = [i for i in range(len(results['anomalies'])) if results['anomalies'][i] == 1]
         if label_indices:
             fig.add_trace(go.Scatter(x=label_indices,
@@ -171,15 +185,12 @@ class SAE(nn.Module):
                                      mode='markers',
                                      name='Predictions on Test Data',
                                      marker=dict(color='black', size=7, symbol='x')))
-        # Set the layout
         fig.update_layout(title='Test Data, Predictions, and Anomalies',
                           xaxis_title='Time Steps',
                           yaxis_title='Value',
                           legend=dict(x=0, y=1, traceorder='normal', orientation='h'),
                           template='plotly',
                           width=plot_width)
-
-        # Show the figure
         fig.show()
 
     def plot_losses(self, fig_size=(10, 6)):
@@ -212,8 +223,8 @@ class SAE(nn.Module):
                 'window_size': self.window_size,
                 'latent_dim': self.latent_dim,
                 'lstm_units': self.lstm_units,
-                'mean_coef': self.stationary_loss.mean_coef,
-                'std_coef': self.stationary_loss.std_coef,
+                'mean_coef': self.mean_coef,
+                'std_coef': self.std_coef,
                 'device': self.device,
                 'lr': self.lr,
             }
