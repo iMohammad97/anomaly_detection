@@ -105,6 +105,8 @@ class VAE(nn.Module):
         inputs, anomalies, outputs, errors = [], [], [], []
         mse = nn.MSELoss(reduction='none').to(self.device)
         for window, anomaly in data:
+            if window.shape[0] == 1:
+                break
             inputs.append(window.squeeze().T[-1])
             anomalies.append(anomaly.squeeze().T[-1])
             window = window.to(self.device)

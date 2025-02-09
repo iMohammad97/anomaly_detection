@@ -60,6 +60,8 @@ class EBM(nn.Module):
         inputs, anomalies, outputs = [], [], []
         with torch.no_grad():
             for window, anomaly in loader:
+                if window.shape[0] == 1:
+                    break
                 inputs.append(window.squeeze().T[-1])
                 anomalies.append(anomaly.squeeze().T[-1])
                 window = window.to(self.device)
