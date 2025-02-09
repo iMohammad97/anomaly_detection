@@ -95,13 +95,16 @@ class FAE(nn.Module):
         results = {}
         inputs, anomalies, outputs, errors = [], [], [], []
         mse = nn.MSELoss(reduction='none').to(self.device)
-        for window, anomaly in data:
-            inputs.append(window.squeeze().T[-1])
-            anomalies.append(anomaly.squeeze().T[-1])
-            window = window.to(self.device)
-            _, recons = self.forward(window)
-            outputs.append(recons.cpu().detach().numpy().squeeze().T[-1])
-            errors.append(mse(window, recons).cpu().detach().numpy().squeeze().T[-1])
+        with torch.no_grad():
+            for window, anomaly in data:
+                if window.shape[0] == 1:
+                    break
+                inputs.append(window.squeeze().T[-1])
+                anomalies.append(anomaly.squeeze().T[-1])
+                window = window.to(self.device)
+                _, recons = self.forward(window)
+                outputs.append(recons.cpu().detach().numpy().squeeze().T[-1])
+                errors.append(mse(window, recons).cpu().detach().numpy().squeeze().T[-1])
         results['inputs'] = np.concatenate(inputs)
         results['anomalies'] = np.concatenate(anomalies)
         results['outputs'] = np.concatenate(outputs)

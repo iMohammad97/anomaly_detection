@@ -79,6 +79,8 @@ class EBMwLD(nn.Module):
         inputs, anomalies, outputs, errors = [], [], [], []
         with torch.no_grad():
             for window, anomaly in test_loader:
+                if window.shape[0] == 1:
+                    break
                 inputs.append(window.squeeze().T[-1])
                 anomalies.append(anomaly.squeeze().T[-1])
                 window = window.to(self.device)

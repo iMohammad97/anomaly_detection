@@ -111,23 +111,24 @@ class SAE(nn.Module):
         inputs, anomalies, outputs, rec_errors = [], [], [], []
         mean_errors, std_errors = [], []
         loss = nn.MSELoss(reduction='none').to(self.device)
-        for window, anomaly in data:
-            if window.shape[0] == 1:
-                break
-            inputs.append(window.squeeze().T[-1])
-            anomalies.append(anomaly.squeeze().T[-1])
+        with torch.no_grad():
+            for window, anomaly in data:
+                if window.shape[0] == 1:
+                    break
+                inputs.append(window.squeeze().T[-1])
+                anomalies.append(anomaly.squeeze().T[-1])
 
-            window = window.to(self.device)
-            recons, latent = self.forward(window)
+                window = window.to(self.device)
+                recons, latent = self.forward(window)
 
-            outputs.append(recons.cpu().detach().numpy().squeeze().T[-1])
+                outputs.append(recons.cpu().detach().numpy().squeeze().T[-1])
 
-            rec_error = loss(window, recons).cpu().detach().numpy().squeeze().T[-1]
-            rec_errors.append(rec_error)
+                rec_error = loss(window, recons).cpu().detach().numpy().squeeze().T[-1]
+                rec_errors.append(rec_error)
 
-            _, mean, std = self.stationary_loss(latent, per_batch=True)
-            mean_errors.append(mean.cpu().detach().numpy().squeeze())
-            std_errors.append(std.cpu().detach().numpy().squeeze())
+                _, mean, std = self.stationary_loss(latent, per_batch=True)
+                mean_errors.append(mean.cpu().detach().numpy().squeeze())
+                std_errors.append(std.cpu().detach().numpy().squeeze())
 
         # Concatenate safely, preserving the batch structure
         results['inputs'] = np.concatenate(inputs)

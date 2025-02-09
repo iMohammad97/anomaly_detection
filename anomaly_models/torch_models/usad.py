@@ -72,15 +72,19 @@ class USAD(nn.Module):
 			self.losses1.append(l1), self.losses2.append(l2)
 
 	def predict(self, data):
+		self.eval()
 		inputs, anomalies, outputs, errors = [], [], [], []
 		mse = nn.MSELoss(reduction='none').to(self.device)
-		for window, anomaly in data:
-			inputs.append(window.squeeze().T[-1])
-			anomalies.append(anomaly.squeeze().T[-1])
-			window = window.to(self.device)
-			recon, _, _ = self.forward(window)
-			outputs.append(recon.cpu().detach().numpy().squeeze().T[-1])
-			errors.append(mse(window, recon).cpu().detach().numpy().squeeze().T[-1])
+		with torch.no_grad():
+			for window, anomaly in data:
+				if window.shape[0] == 1:
+					break
+				inputs.append(window.squeeze().T[-1])
+				anomalies.append(anomaly.squeeze().T[-1])
+				window = window.to(self.device)
+				recon, _, _ = self.forward(window)
+				outputs.append(recon.cpu().detach().numpy().squeeze().T[-1])
+				errors.append(mse(window, recon).cpu().detach().numpy().squeeze().T[-1])
 		inputs = np.concatenate(inputs)
 		anomalies = np.concatenate(anomalies)
 		outputs = np.concatenate(outputs)

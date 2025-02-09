@@ -2,6 +2,7 @@
 #   - Review code to make sure it works as intended
 #   - Alter predict method to do what we might want
 #   - Add thresholding capability to the rest of the models
+#   - Fix last batch of size 1 instead of skipping it
 
 # From papers (and TranAD repository)
 from .dagmm import DAGMM
