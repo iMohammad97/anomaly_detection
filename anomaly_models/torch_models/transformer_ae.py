@@ -99,25 +99,66 @@ class TransformerAE(nn.Module):
             self.losses.append(np.mean(recons))
     
     @torch.no_grad()
-    def predict(self, data, train: bool = False):
-        results = {}
-        inputs, anomalies, outputs, errors = [], [], [], []
-        loss = nn.MSELoss(reduction='none').to(self.device)
-        for window, anomaly in data:
-            inputs.append(window.squeeze().T[-1])
-            anomalies.append(anomaly.squeeze().T[-1])
-            window = window.to(self.device)
-            recons = self.forward(window)
-            outputs.append(recons.cpu().detach().numpy().squeeze().T[-1])
-            errors.append(loss(window, recons).cpu().detach().numpy().squeeze().T[-1])
-        results['inputs'] = np.concatenate(inputs)
-        results['anomalies'] = np.concatenate(anomalies)
-        results['outputs'] = np.concatenate(outputs)
-        results['errors'] = np.concatenate(errors)
+    def predict(self, data_loader, train: bool = False):
+        """
+        data_loader: A DataLoader returning (window, label) pairs in batches
+        train: If True, we compute threshold from the errors in these data
+               If False and self.threshold is already set, we do predictions
+        """
+        self.eval()
+        loss = nn.MSELoss(reduction="none").to(self.device)
+
+        all_inputs = []
+        all_anomalies = []
+        all_outputs = []
+        all_errors = []
+
+        for d, a in tqdm(data_loader, desc="Predicting", leave=False):
+            # d: shape (batch_size, seq_len, n_features)
+            # a: shape (batch_size, seq_len, n_features) for labels
+            d = d.to(self.device)
+            recons = self.forward(d)  # (batch_size, seq_len, n_features)
+
+            # Calculate MSE element-wise
+            batch_errors = loss(d, recons)  # (batch_size, seq_len, n_features)
+            batch_errors = batch_errors.detach().cpu().numpy()
+
+            # Bring everything to CPU for concatenation
+            recons = recons.detach().cpu().numpy()
+            d = d.detach().cpu().numpy()
+            a = a.detach().cpu().numpy()
+
+            all_inputs.append(d)      # shape: (batch_size, seq_len, n_features)
+            all_anomalies.append(a)   # same
+            all_outputs.append(recons)
+            all_errors.append(batch_errors)
+
+        # Concatenate along batch dimension
+        all_inputs = np.concatenate(all_inputs, axis=0)    # (N, seq_len, n_features)
+        all_anomalies = np.concatenate(all_anomalies, axis=0)
+        all_outputs = np.concatenate(all_outputs, axis=0)
+        all_errors = np.concatenate(all_errors, axis=0)
+
+        # For plotting or threshold-based classification, often we look at the last dimension
+        # or some aggregated measure. We can flatten or reduce as needed.
+        results = {
+            "inputs": all_inputs,       # shape (N, seq_len, n_features)
+            "anomalies": all_anomalies, # shape (N, seq_len, n_features)
+            "outputs": all_outputs,     # shape (N, seq_len, n_features)
+            "errors": all_errors        # shape (N, seq_len, n_features)
+        }
+
+        # If train=True, set threshold as mean + 3*std of errors over the entire dataset
         if train:
-            self.threshold = np.mean(results['errors']) + 3 * np.std(results['errors'])
-        elif self.threshold:
-            results['predictions'] = [1 if error > self.threshold else 0 for error in results['errors']]
+            flat_errors = all_errors.reshape(-1)
+            self.threshold = np.mean(flat_errors) + 3.0 * np.std(flat_errors)
+        elif self.threshold is not None:
+            # For demonstration, label any window as anomaly if the *max* error in the window
+            # is above threshold. We can adjust as needed (mean error, etc.).
+            window_maxes = all_errors.max(axis=(1,2))  # shape (N,)
+            predictions = (window_maxes > self.threshold).astype(int)
+            results["predictions"] = predictions
+
         return results
 
     def plot_results(self, data, train: bool = False, plot_width: int = 800):
