@@ -97,7 +97,8 @@ class TransformerAE(nn.Module):
                 p.set_description(f'Batch Loss = {recons[-1]:.4f}')
             pbar.set_description(f'{loss_name} Loss = {np.mean(recons):.4f}')
             self.losses.append(np.mean(recons))
-
+    
+    @torch.no_grad()
     def predict(self, data, train: bool = False):
         results = {}
         inputs, anomalies, outputs, errors = [], [], [], []
