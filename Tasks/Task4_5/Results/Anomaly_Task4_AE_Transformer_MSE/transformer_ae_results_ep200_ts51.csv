@@ -1,0 +1,2 @@
+ModelPath,AUC_Custom,PerfectPointFound,AUC_PR,AUC_ROC,CompositeF1
+/kaggle/working/results/transformer_ae_model_ep200_ts51.pth,0.00510204081632653,False,0.004813127862218193,0.666163736552086,0.017621145374449337
