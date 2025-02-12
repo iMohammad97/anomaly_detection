@@ -3,7 +3,8 @@ from metrics.timepoint_precision import pointwise_precision
 from metrics.f_composite import composite_f_score
 from metrics.auc_roc import compute_auc_roc
 from metrics.auc_pr import compute_auc_pr
-from metrics.auc_event import custom_auc_score
+from metrics.auc_event import custom_auc_with_perfect_point
+import numpy as np
 
 
 def get_all_metrics(anomaly_preds, anomaly_scores, Y_test):
@@ -33,7 +34,7 @@ def get_all_metrics(anomaly_preds, anomaly_scores, Y_test):
     fc1  = composite_f_score(Y_test, anomaly_preds)
     auc_roc_val = compute_auc_roc(Y_test, anomaly_scores)
     auc_pr_val  = compute_auc_pr(Y_test, anomaly_scores)
-    custom_auc_val = custom_auc_score(Y_test, anomaly_scores, threshold_steps=100, plot=False)
+    custom_auc_val = custom_auc_with_perfect_point(Y_test, anomaly_scores, threshold_steps=100, plot=False)
     
     return {
         'pointwise_precision': prt,
