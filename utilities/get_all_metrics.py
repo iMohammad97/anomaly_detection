@@ -34,7 +34,7 @@ def get_all_metrics(anomaly_preds, anomaly_scores, Y_test):
     fc1  = composite_f_score(Y_test, anomaly_preds)
     auc_roc_val = compute_auc_roc(Y_test, anomaly_scores)
     auc_pr_val  = compute_auc_pr(Y_test, anomaly_scores)
-    custom_auc_val = custom_auc_with_perfect_point(Y_test, anomaly_scores, threshold_steps=100, plot=False)
+    custom_auc_val, pp = custom_auc_with_perfect_point(Y_test, anomaly_scores, threshold_steps=100, plot=False)
     
     return {
         'pointwise_precision': prt,
@@ -42,5 +42,6 @@ def get_all_metrics(anomaly_preds, anomaly_scores, Y_test):
         'composite_f_score': fc1,
         'auc_roc': auc_roc_val,
         'auc_pr': auc_pr_val,
-        'custom_auc': custom_auc_val
+        'custom_auc': custom_auc_val,
+        'perfect_point': pp
     }
