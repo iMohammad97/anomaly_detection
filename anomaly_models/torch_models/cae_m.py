@@ -28,6 +28,7 @@ class CAE_M(nn.Module):
         self.to(device)
         self.optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=1e-5)
         self.losses = []
+        self.threshold = None
 
     def forward(self, g):
         ## Encode
@@ -54,8 +55,9 @@ class CAE_M(nn.Module):
             pbar.set_description(f'MSE = {np.mean(l1s):.4f}')
             self.losses.append(np.mean(l1s))
 
-    def predict(self, data):
+    def predict(self, data, train: bool = False):
         self.eval()
+        results = {}
         inputs, anomalies, outputs, errors = [], [], [], []
         mse = nn.MSELoss(reduction='none').to(self.device)
         with torch.no_grad():
@@ -68,43 +70,54 @@ class CAE_M(nn.Module):
                 recon = self.forward(window)
                 outputs.append(recon.cpu().detach().numpy().squeeze().T[-1])
                 errors.append(mse(window, recon).cpu().detach().numpy().squeeze().T[-1])
-        inputs = np.concatenate(inputs)
-        anomalies = np.concatenate(anomalies)
-        outputs = np.concatenate(outputs)
-        errors = np.concatenate(errors)
-        return inputs, anomalies, outputs, errors
+        results['inputs'] = np.concatenate(inputs)
+        results['anomalies'] = np.concatenate(anomalies)
+        results['outputs'] = np.concatenate(outputs)
+        results['errors'] = np.concatenate(errors)
+        if train:
+            self.threshold = np.mean(results['errors']) + 3 * np.std(results['errors'])
+        elif self.threshold:
+            results['predictions'] = [1 if error > self.threshold else 0 for error in results['errors']]
+        return results
 
-    def plot_results(self, data, plot_width: int = 800):
-        inputs, anomalies, outputs, errors = self.predict(data)
+    def plot_results(self, data, train: bool = False, plot_width: int = 800):
+        results = self.predict(data, train=train)
 
         fig = go.Figure()
 
-        fig.add_trace(go.Scatter(x=list(range(len(inputs))),
-                                 y=inputs,
+        fig.add_trace(go.Scatter(x=list(range(len(results['inputs']))),
+                                 y=results['inputs'],
                                  mode='lines',
                                  name='Test Data',
                                  line=dict(color='blue')))
 
-        fig.add_trace(go.Scatter(x=list(range(len(outputs))),
-                                 y=outputs,
+        fig.add_trace(go.Scatter(x=list(range(len(results['outputs']))),
+                                 y=results['outputs'],
                                  mode='lines',
                                  name='Predictions',
                                  line=dict(color='purple')))
 
-        fig.add_trace(go.Scatter(x=list(range(len(errors))),
-                                 y=errors,
+        fig.add_trace(go.Scatter(x=list(range(len(results['errors']))),
+                                 y=results['errors'],
                                  mode='lines',
                                  name='Anomaly Errors',
                                  line=dict(color='red')))
 
-        label_indices = [i for i in range(len(anomalies)) if anomalies[i] == 1]
+        label_indices = [i for i in range(len(results['anomalies'])) if results['anomalies'][i] == 1]
         if label_indices:
             fig.add_trace(go.Scatter(x=label_indices,
-                                     y=[inputs[i] for i in label_indices],
+                                     y=[results['inputs'][i] for i in label_indices],
                                      mode='markers',
                                      name='Labels on Test Data',
                                      marker=dict(color='orange', size=10)))
-
+        if self.threshold is not None and not train:
+            label_indices = [i for i in range(len(results['anomalies'])) if results['predictions'][i] == 1]
+            fig.add_hline(y=self.threshold, name='Threshold')
+            fig.add_trace(go.Scatter(x=label_indices,
+                                     y=[results['inputs'][i] for i in label_indices],
+                                     mode='markers',
+                                     name='Predictions on Test Data',
+                                     marker=dict(color='black', size=7, symbol='x')))
         fig.update_layout(title='Test Data, Predictions, and Anomalies',
                           xaxis_title='Time Steps',
                           yaxis_title='Value',
