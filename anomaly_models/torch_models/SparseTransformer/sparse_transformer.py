@@ -7,13 +7,14 @@ from torch.nn import MultiheadAttention
 
 class SparseMultiheadAttention(nn.Module):
     """Simple sparse multihead attention using a limited attention span"""
-    def __init__(self, embed_dim, num_heads, dropout=0.1, attn_span=50):
+    def __init__(self, embed_dim, num_heads, dropout=0.1, attn_span=50, batch_first: bool = True):
         super().__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.dropout = dropout
         self.attn_span = attn_span
         self.head_dim = embed_dim // num_heads
+        self.batch_first = batch_first
         if self.head_dim * num_heads != self.embed_dim:
             raise ValueError("embed_dim must be divisible by num_heads")
         self.query_ff = nn.Linear(embed_dim, embed_dim)
