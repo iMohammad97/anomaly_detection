@@ -246,10 +246,13 @@ from anomaly_models.torch_models import TransformerAE, TransformerVAE, Transform
 from anomaly_models.torch_models.SparseTransformer import replace_modules
 
 # Instantiate original model  
-model = TransformerAE() # or TransformerVAE, or TransformerSAE
+model = TransformerAE(device='cuda') # or TransformerVAE, or TransformerSAE
 
 # Replace Attention layers with Sparse Attention
 replace_modules(model)
+
+# If using cuda, you must move the new layers to cuda as well
+model.to('cuda')
 ```
 
 # References
