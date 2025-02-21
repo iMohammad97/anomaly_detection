@@ -237,7 +237,20 @@ model.learn(train_loader, n_epochs=10)
 model.plot_results(test_loader)
 ```
 
+### Sparse Transformers
+To make Transformers used in architectures sparse (similar to [Generating Long Sequences with Sparse Transformers](https://arxiv.org/abs/1904.10509))
+you can simply perform the following steps on any of the Transformer based models and continue as usual.
 
+```python
+from anomaly_models.torch_models import TransformerAE, TransformerVAE, TransformerSAE
+from anomaly_models.torch_models.SparseTransformer import replace_modules
+
+# Instantiate original model  
+model = TransformerAE() # or TransformerVAE, or TransformerSAE
+
+# Replace Attention layers with Sparse Attention
+replace_modules(model)
+```
 
 # References
 - https://github.com/imperial-qore/TranAD/
