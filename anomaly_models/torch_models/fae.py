@@ -38,12 +38,18 @@ class FAE(nn.Module):
         x = x.view(x.size(0), -1)
 
         # Apply FFT at the beginning
-        x = torch.fft.fft(x, dim=1).real
+        x_complex = torch.fft.fft(x, dim=1)
+        x_real = x_complex.real
+        x_imag = x_complex.imag
+
+        # Concatenate real and imaginary parts
+        x = torch.cat([x_real, x_imag], dim=1)
 
         # Encode
         x = torch.relu(self.encoder_fc1(x))
         x = torch.relu(self.encoder_fc2(x))
         latent = torch.relu(self.encoder_fc3(x))
+
         return latent
 
     def decode(self, z):
@@ -51,8 +57,16 @@ class FAE(nn.Module):
         x = torch.relu(self.decoder_fc2(x))
         x = self.decoder_fc3(x)
 
+        # Split into real and imaginary parts
+        half_size = x.shape[1] // 2
+        x_real = x[:, :half_size]
+        x_imag = x[:, half_size:]
+
+        # Reconstruct complex tensor
+        x_complex = torch.complex(x_real, x_imag)
+
         # Apply IFFT at the end
-        x = torch.fft.ifft(x, dim=1).real
+        x = torch.fft.ifft(x_complex, dim=1).real
 
         # Reshape back to original shape
         x = x.view(x.size(0), self.window_size, self.n_features)
