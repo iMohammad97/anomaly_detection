@@ -42,6 +42,8 @@ class KANAE(nn.Module):
             return nn.SmoothL1Loss(reduction='mean').to(self.device)
         elif loss_name == "MaxDiff":
             return lambda inputs, target: torch.max(torch.abs(inputs - target))
+        elif loss_name == "MSE_R2":
+              return lambda inputs, target: (F.mse_loss(inputs, target, reduction='mean') + (1 - (1 - torch.sum((target - inputs) ** 2) / (torch.sum((target - torch.mean(target)) ** 2) + 1e-10)))) / 2
         else:
             raise ValueError("Unsupported loss function")
 
