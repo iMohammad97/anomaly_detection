@@ -21,6 +21,8 @@ from .transformer_sae import TransformerSAE
 from .fae import FAE
 from .dfae import DFAE # Denoising FAE
 
+from .gemini import Twin # TODO: I'm not done yet!
+
 # Currently only works with FAE (and maybe DFAE)
 from .rd import StudentDecoder
 
