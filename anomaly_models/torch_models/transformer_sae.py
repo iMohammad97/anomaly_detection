@@ -186,12 +186,12 @@ class TransformerSAE(nn.Module):
                                  name='Reconstruction Errors',
                                  line=dict(color='red')))
         fig.add_trace(go.Scatter(x=list(range(len(results['means']))),
-                                 y=results['errors'],
+                                 y=results['means'],
                                  mode='lines',
                                  name='Mean Errors',
                                  line=dict(color='pink')))
         fig.add_trace(go.Scatter(x=list(range(len(results['stds']))),
-                                 y=results['errors'],
+                                 y=results['stds'],
                                  mode='lines',
                                  name='STD Errors',
                                  line=dict(color='green')))

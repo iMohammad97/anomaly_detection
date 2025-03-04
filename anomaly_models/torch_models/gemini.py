@@ -25,17 +25,14 @@ class Twin(nn.Module):
         self.encoder_lstm1 = nn.LSTM(n_features, lstm_units, batch_first=True)
         self.encoder_lstm2 = nn.LSTM(lstm_units, lstm_units, batch_first=True)
         self.encoder_lstm3 = nn.LSTM(lstm_units, latent_dim//2, batch_first=True)
-
         self.decoder_lstm1 = nn.LSTM(latent_dim//2, lstm_units, batch_first=True)
         self.decoder_lstm2 = nn.LSTM(lstm_units, lstm_units, batch_first=True)
         self.decoder_lstm3 = nn.LSTM(lstm_units, n_features, batch_first=True)
 
         # Fourier Layers
-
         self.encoder_fc1 = nn.Linear(2 * n_features * window_size, 128)
         self.encoder_fc2 = nn.Linear(128, 64)
         self.encoder_fc3 = nn.Linear(64, latent_dim)
-
         self.decoder_fc1 = nn.Linear(latent_dim, 64)
         self.decoder_fc2 = nn.Linear(64, 128)
         self.decoder_fc3 = nn.Linear(128, 2 * n_features * window_size)
@@ -110,14 +107,12 @@ class Twin(nn.Module):
         x = self.freq_decode(latent)
         return latent, x
 
-
     def forward(self, x):
         x_lstm = x[:, -self.latent_dim:]
         _, y = self.freq_forward(x)
         z, latent = self.time_forward(x_lstm)
         y[:, -self.latent_dim:] += z
         return latent, y
-
 
     def select_loss(self, loss_name: str):
         if loss_name == "MSE":
@@ -150,12 +145,14 @@ class Twin(nn.Module):
                 self.optimizer.step()
             rl, ml, sl = np.mean(recons), np.mean(means), np.mean(stds)
             pbar.set_description(f'{loss_name} Loss = {rl:.4f}, Avg Loss = {ml:.4f}, STD Loss = {sl:.4f} ')
-            self.losses.append(np.mean(recons))
+            self.recon_losses.append(rl), self.mean_losses.append(ml)
+            self.std_losses.append(sl), self.losses.append(rl + ml + sl)
 
-    def predict(self, data, train: bool = False):
+    def predict(self, data, train: bool = False, window_coef: float = 0.2):
         self.eval()
         results = {}
-        inputs, anomalies, outputs, errors = [], [], [], []
+        inputs, anomalies, outputs, rec_errors = [], [], [], []
+        mean_errors, std_errors = [], []
         mse = nn.MSELoss(reduction='none').to(self.device)
         with torch.no_grad():
             for window, anomaly in data:
@@ -164,13 +161,20 @@ class Twin(nn.Module):
                 inputs.append(window.squeeze().T[-1])
                 anomalies.append(anomaly.squeeze().T[-1])
                 window = window.to(self.device)
-                _, recons = self.forward(window)
+                latent, recons = self.forward(window)
                 outputs.append(recons.cpu().detach().numpy().squeeze().T[-1])
-                errors.append(mse(window, recons).cpu().detach().numpy().squeeze().T[-1])
+                rec_error = mse(window, recons)
+                rec_error = rec_error[:, -1].cpu().detach().numpy().squeeze().T + window_coef * torch.mean(rec_error, dim=1).cpu().detach().numpy().squeeze().T
+                rec_errors.append(rec_error)
+                _, mean, std = self.stationary_loss(latent, per_batch=True)
+                mean_errors.append(mean.cpu().detach().numpy().squeeze())
+                std_errors.append(std.cpu().detach().numpy().squeeze())
         results['inputs'] = np.concatenate(inputs)
         results['anomalies'] = np.concatenate(anomalies)
         results['outputs'] = np.concatenate(outputs)
-        results['errors'] = np.concatenate(errors)
+        results['errors'] = np.concatenate(rec_errors)
+        results['means'] = np.concatenate(mean_errors)
+        results['stds'] = np.concatenate(std_errors)
         if train and self.threshold is None:
             self.threshold = np.mean(results['errors']) + 3 * np.std(results['errors'])
         elif not train and self.threshold:
@@ -195,6 +199,16 @@ class Twin(nn.Module):
                                  mode='lines',
                                  name='Anomaly Errors',
                                  line=dict(color='red')))
+        fig.add_trace(go.Scatter(x=list(range(len(results['means']))),
+                                 y=results['means'],
+                                 mode='lines',
+                                 name='Mean Errors',
+                                 line=dict(color='pink')))
+        fig.add_trace(go.Scatter(x=list(range(len(results['stds']))),
+                                 y=results['stds'],
+                                 mode='lines',
+                                 name='STD Errors',
+                                 line=dict(color='green')))
         label_indices = [i for i in range(len(results['anomalies'])) if results['anomalies'][i] == 1]
         if label_indices:
             fig.add_trace(go.Scatter(x=label_indices,
@@ -204,7 +218,7 @@ class Twin(nn.Module):
                                      marker=dict(color='orange', size=10)))
         if self.threshold is not None and not train:
             label_indices = [i for i in range(len(results['anomalies'])) if results['predictions'][i] == 1]
-            fig.add_hline(y=self.threshold, name='Threshold')
+            fig.add_hline(y=self.threshold, line_dash='dash', name='Threshold')
             fig.add_trace(go.Scatter(x=label_indices,
                                      y=[results['inputs'][i] for i in label_indices],
                                      mode='markers',
@@ -237,6 +251,9 @@ class Twin(nn.Module):
         xs = np.arange(len(self.losses)) + 1
         plt.figure(figsize=fig_size)
         plt.plot(xs, self.losses, label='Total Loss')
+        plt.plot(xs, self.recon_losses, label='REC Losses')
+        plt.plot(xs, self.mean_losses, label='AVG Losses')
+        plt.plot(xs, self.std_losses, label='STD Losses')
         plt.grid()
         plt.xticks(xs)
         plt.legend()
