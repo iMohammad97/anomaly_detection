@@ -18,13 +18,13 @@ class FAE(nn.Module):
         self.window_size = window_size
         self.latent_dim = latent_dim
 
-        self.encoder_fc1 = nn.Linear(n_features * window_size, 128)
+        self.encoder_fc1 = nn.Linear(2 * n_features * window_size, 128)
         self.encoder_fc2 = nn.Linear(128, 64)
         self.encoder_fc3 = nn.Linear(64, latent_dim)
 
         self.decoder_fc1 = nn.Linear(latent_dim, 64)
         self.decoder_fc2 = nn.Linear(64, 128)
-        self.decoder_fc3 = nn.Linear(128, n_features * window_size)
+        self.decoder_fc3 = nn.Linear(128, 2 * n_features * window_size)
 
         self.to(device)
 
