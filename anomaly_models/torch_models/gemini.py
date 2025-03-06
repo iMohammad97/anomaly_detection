@@ -53,11 +53,9 @@ class Twin(nn.Module):
 
         # Apply FFT at the beginning
         x_complex = torch.fft.fft(x, dim=1)
-        x_real = x_complex.real
-        x_imag = x_complex.imag
 
         # Concatenate real and imaginary parts
-        x = torch.cat([x_real, x_imag], dim=1)
+        x = torch.cat([x_complex.real, x_complex.imag], dim=1)
 
         # Encode
         x = torch.relu(self.encoder_fc1(x))
@@ -73,11 +71,9 @@ class Twin(nn.Module):
 
         # Split into real and imaginary parts
         half_size = x.shape[1] // 2
-        x_real = x[:, :half_size]
-        x_imag = x[:, half_size:]
 
         # Reconstruct complex tensor
-        x_complex = torch.complex(x_real, x_imag)
+        x_complex = torch.complex( x[:, :half_size], x[:, half_size:])
 
         # Apply IFFT at the end
         x = torch.fft.ifft(x_complex, dim=1).real
@@ -126,17 +122,17 @@ class Twin(nn.Module):
         else:
             raise ValueError("Unsupported loss function")
 
-    def learn(self, train_loader, n_epochs: int, seed: int = 42, loss_name: str = 'MaxDiff'):
+    def learn(self, train_loader, n_epochs: int, seed: int = 42, loss_name1: str = 'MSE_R2', loss_name2: str = 'MaxDiff'):
         torch.manual_seed(seed)
         self.train()
-        recon_loss = self.select_loss(loss_name)
+        recon_loss1 = self.select_loss(loss_name1)
+        recon_loss2 = self.select_loss(loss_name2)
         for _ in (pbar := trange(n_epochs)):
             recons, means, stds = [], [], []
             for d, a in tqdm(train_loader, leave=False):
                 d = d.to(self.device)
                 latent, x = self.forward(d)
-                recon = recon_loss(x, d)
-                recons.append(recon.item())
+                recon = recon_loss1(x, d) + recon_loss2(x[:, -self.latent_dim:], d[:, -self.latent_dim:])
                 _, mean, std = self.stationary_loss(latent)
                 loss = recon + mean + std
                 recons.append(recon.item()), means.append(mean.item()), stds.append(std.item())
@@ -144,7 +140,7 @@ class Twin(nn.Module):
                 loss.backward()
                 self.optimizer.step()
             rl, ml, sl = np.mean(recons), np.mean(means), np.mean(stds)
-            pbar.set_description(f'{loss_name} Loss = {rl:.4f}, Avg Loss = {ml:.4f}, STD Loss = {sl:.4f} ')
+            pbar.set_description(f'{loss_name1} + {loss_name2} Loss = {rl:.4f}, Avg Loss = {ml:.4f}, STD Loss = {sl:.4f} ')
             self.recon_losses.append(rl), self.mean_losses.append(ml)
             self.std_losses.append(sl), self.losses.append(rl + ml + sl)
 
