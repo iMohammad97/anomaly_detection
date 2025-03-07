@@ -182,36 +182,29 @@ class TorchMoE:
     def _compute_threshold_e2(self, train_loader, recon_loss_func):
         e2_error_list = []
 
-        self.expert1.eval()
-        self.expert2.eval()
+        for data_batch, _ in train_loader:
+            data_batch = data_batch.to(self.device)
+            latent1, recon1 = self.expert1.forward(data_batch)
+            if self.loss_name == 'MaxDiff':
+                e1_error_vec = (recon1 - data_batch).abs().max(dim=2)[0].max(dim=1)[0]
+            else:
+                e1_error_vec = torch.mean((recon1 - data_batch) ** 2, dim=(1, 2))
 
-        with torch.no_grad():
-            for data_batch, _ in train_loader:
-                data_batch = data_batch.to(self.device)
+            pass_mask = (e1_error_vec > self.threshold_e1).cpu().numpy()
+            pass_indices = np.where(pass_mask == True)[0]
+            if len(pass_indices) == 0:
+                continue
 
-                latent1, recon1 = self.expert1.forward(data_batch)
+            sub_batch = data_batch[pass_indices]
+            latent2, recon2 = self.expert2.forward(sub_batch)
+            if self.loss_name == 'MaxDiff':
+                e2_sub_vec = (recon2 - sub_batch).abs().max(dim=2)[0].max(dim=1)[0]
+            else:
+                e2_sub_vec = torch.mean((recon2 - sub_batch) ** 2, dim=(1, 2))
 
-                # --- MISSING LOGIC: define e1_error_vec here ---
-                if self.loss_name == 'MaxDiff':
-                    e1_error_vec = (recon1 - data_batch).abs().max(dim=2)[0].max(dim=1)[0]
-                else:
-                    e1_error_vec = torch.mean((recon1 - data_batch) ** 2, dim=(1, 2))
-                # ----------------------------------------------
-
-                pass_mask = (e1_error_vec > self.threshold_e1).cpu().numpy()
-                pass_indices = np.where(pass_mask == True)[0]
-                if len(pass_indices) == 0:
-                    continue
-
-                sub_batch = data_batch[pass_indices]
-                latent2, recon2 = self.expert2.forward(sub_batch)
-
-                if self.loss_name == 'MaxDiff':
-                    e2_sub_vec = (recon2 - sub_batch).abs().max(dim=2)[0].max(dim=1)[0]
-                else:
-                    e2_sub_vec = torch.mean((recon2 - sub_batch) ** 2, dim=(1, 2))
-
-                e2_error_list.extend(e2_sub_vec.detach().cpu().numpy())
+            # ==> DETACH HERE <==
+            e2_sub_vec_np = e2_sub_vec.detach().cpu().numpy()
+            e2_error_list.extend(e2_sub_vec_np)
 
         if len(e2_error_list) == 0:
             self.threshold_e2 = 9999999
