@@ -328,6 +328,7 @@ class TorchMoE:
                 else:
                     err_vec = torch.mean((recon - data_batch)**2, dim=(1,2)).cpu().numpy()
 
+                print(anomalies.shape())
                 # For plotting, store last step in time
                 inputs_list.append(data_batch.cpu().numpy()[:, -1, :])
                 outputs_list.append(recon.cpu().numpy()[:, -1, :])
