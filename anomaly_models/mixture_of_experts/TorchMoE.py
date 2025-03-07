@@ -416,7 +416,8 @@ class TorchMoE:
                 inputs_list.append(data_batch.cpu().numpy()[:, -1, :])
                 outputs_list.append(recon.cpu().numpy()[:, -1, :])
                 errors_list.append(err_vec)
-                anomaly_list.append(anomalies.numpy())
+                anomaly_list.append(anomalies.numpy()[:, -1])
+                # anomaly_list.append(anomalies.numpy())
 
         inputs = np.concatenate(inputs_list).squeeze()
         outputs = np.concatenate(outputs_list).squeeze()
