@@ -397,78 +397,129 @@ class TorchMoE:
     ###########################################################################
     def plot_expert2(self, data_loader, train=False, plot_width=800):
         """
-        Feeds all data to expert2 alone, ignoring gating, and plots everything similarly.
+        Feeds all data to expert2 alone (ignoring gating) and plots:
+          - Original data (last time-step per sample)
+          - Expert2 reconstruction (last time-step per sample)
+          - Reconstruction error
+          - Labeled anomalies (0/1), if they exist
+          - Predicted anomalies if threshold_e2 is set (and train=False)
         """
+        import plotly.graph_objects as go
+        import numpy as np
+        import torch
+
         with torch.no_grad():
-            inputs_list  = []
+            inputs_list = []
             outputs_list = []
-            errors_list  = []
+            errors_list = []
             anomaly_list = []
+
             for data_batch, anomalies in data_loader:
+                # data_batch shape (B, window_size, features)
                 data_batch = data_batch.to(self.device)
                 latent, recon = self.expert2.forward(data_batch)
 
+                # Compute reconstruction errors
                 if self.loss_name == 'MaxDiff':
+                    # shape => (B,) for each sample
                     err_vec = (recon - data_batch).abs().max(dim=2)[0].max(dim=1)[0].cpu().numpy()
                 else:
-                    err_vec = torch.mean((recon - data_batch)**2, dim=(1,2)).cpu().numpy()
+                    # shape => (B,)
+                    err_vec = torch.mean((recon - data_batch) ** 2, dim=(1, 2)).cpu().numpy()
 
-                inputs_list.append(data_batch.cpu().numpy()[:, -1, :])
-                outputs_list.append(recon.cpu().numpy()[:, -1, :])
-                errors_list.append(err_vec)
-                anomaly_list.append(anomalies.numpy()[:, -1])
-                # anomaly_list.append(anomalies.numpy())
+                # For plotting, store the *final time-step* of input & output
+                # so we get a 1D sequence across the batch
+                inputs_list.append(data_batch.cpu().numpy()[:, -1, :])  # shape (B, features)
+                outputs_list.append(recon.cpu().numpy()[:, -1, :])  # shape (B, features)
+                errors_list.append(err_vec)  # shape (B,)
 
-        inputs = np.concatenate(inputs_list).squeeze()
-        outputs = np.concatenate(outputs_list).squeeze()
-        errors = np.concatenate(errors_list)
-        anomalies = np.concatenate(anomaly_list)
+                # Also ensure anomalies is a 1D array of shape (B,) with 0/1 per example
+                # If anomalies is shape (B, window_size), take the final time-step:
+                anomalies_1d = anomalies.numpy()
+                if anomalies_1d.ndim == 2 and anomalies_1d.shape[1] == self.window_size:
+                    # pick last time-step
+                    anomalies_1d = anomalies_1d[:, -1]
+                # Now flatten to 1D
+                anomalies_1d = anomalies_1d.ravel()  # shape (B,)
+                anomaly_list.append(anomalies_1d)
 
-        if train and self.threshold_e2 < 0.1:
-            self.threshold_e2 = errors.mean() + 3*errors.std()
-        preds = [1 if e > self.threshold_e2 else 0 for e in errors]
+        # Concatenate along batch dimension
+        inputs = np.concatenate(inputs_list, axis=0).squeeze()  # shape (total_samples,)
+        outputs = np.concatenate(outputs_list, axis=0).squeeze()  # shape (total_samples,)
+        errors = np.concatenate(errors_list, axis=0)  # shape (total_samples,)
+        anomalies = np.concatenate(anomaly_list, axis=0).squeeze()  # shape (total_samples,)
 
+        # If training and threshold_e2 isn't set, we can set it
+        # but typically we'd set threshold after gating logic. For example:
+        if train and (self.threshold_e2 <= 0):
+            self.threshold_e2 = errors.mean() + 3 * errors.std()
+
+        # Make predictions (binary) if threshold_e2 is set and we're not in training mode
+        preds = None
+        if (not train) and (self.threshold_e2 is not None):
+            preds = [1 if e > self.threshold_e2 else 0 for e in errors]
+
+        # Build plot
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=list(range(len(inputs))),
-                                 y=inputs,
-                                 mode='lines',
-                                 name='Data',
-                                 line=dict(color='blue')))
-        fig.add_trace(go.Scatter(x=list(range(len(outputs))),
-                                 y=outputs,
-                                 mode='lines',
-                                 name='Expert2 Recon',
-                                 line=dict(color='purple')))
-        fig.add_trace(go.Scatter(x=list(range(len(errors))),
-                                 y=errors,
-                                 mode='lines',
-                                 name='Expert2 Errors',
-                                 line=dict(color='red')))
 
+        # Data
+        fig.add_trace(go.Scatter(
+            x=list(range(len(inputs))),
+            y=inputs,
+            mode='lines',
+            name='Data',
+            line=dict(color='blue')
+        ))
+        # Expert2 recon
+        fig.add_trace(go.Scatter(
+            x=list(range(len(outputs))),
+            y=outputs,
+            mode='lines',
+            name='Expert2 Recon',
+            line=dict(color='purple')
+        ))
+        # Errors
+        fig.add_trace(go.Scatter(
+            x=list(range(len(errors))),
+            y=errors,
+            mode='lines',
+            name='Expert2 Errors',
+            line=dict(color='red')
+        ))
+
+        # Labeled anomalies
         label_indices = [i for i in range(len(anomalies)) if anomalies[i] == 1]
         if label_indices:
-            fig.add_trace(go.Scatter(x=label_indices,
-                                     y=[inputs[i] for i in label_indices],
-                                     mode='markers',
-                                     name='Labels',
-                                     marker=dict(color='orange', size=7)))
+            fig.add_trace(go.Scatter(
+                x=label_indices,
+                y=[inputs[i] for i in label_indices],
+                mode='markers',
+                name='Labels',
+                marker=dict(color='orange', size=7)
+            ))
 
+        # Show threshold & predicted anomalies if we have them
         if (not train) and (self.threshold_e2 is not None):
             fig.add_hline(y=self.threshold_e2, line_dash='dash', name='Threshold E2')
-            pred_indices = [i for i in range(len(preds)) if preds[i] == 1]
-            if pred_indices:
-                fig.add_trace(go.Scatter(x=pred_indices,
-                                         y=[inputs[i] for i in pred_indices],
-                                         mode='markers',
-                                         name='Predicted Anomalies',
-                                         marker=dict(color='black', size=7, symbol='x')))
+            if preds is not None:
+                pred_indices = [i for i in range(len(preds)) if preds[i] == 1]
+                if pred_indices:
+                    fig.add_trace(go.Scatter(
+                        x=pred_indices,
+                        y=[inputs[i] for i in pred_indices],
+                        mode='markers',
+                        name='Pred. Anomalies',
+                        marker=dict(color='black', size=7, symbol='x')
+                    ))
 
-        fig.update_layout(title='Expert2 Alone Results',
-                          xaxis_title='Time Steps',
-                          yaxis_title='Value',
-                          legend=dict(x=0, y=1, orientation='h'),
-                          template='plotly',
-                          width=plot_width)
+        fig.update_layout(
+            title='Expert2 Alone Results',
+            xaxis_title='Samples',
+            yaxis_title='Value',
+            legend=dict(x=0, y=1, orientation='h'),
+            template='plotly',
+            width=plot_width
+        )
         fig.show()
 
     ###########################################################################
