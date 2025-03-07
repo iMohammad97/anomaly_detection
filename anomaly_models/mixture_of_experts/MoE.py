@@ -692,3 +692,40 @@ class MixtureOfExperts:
             self.labels     = label_data
 
         print(f"Loaded experts from {expert1_path}, {expert2_path}.")
+
+
+# Example usage
+from anomaly_models.AE_Classes import LSTMAutoencoder
+# from anomaly_models.mixture_of_experts.MoE import MixtureOfExperts
+
+# Load data
+X_train = ...
+X_test  = ...
+Y_test  = ...
+
+# Instantiate MoE
+moe = MixtureOfExperts(
+    ExpertClass=LSTMAutoencoder,
+    train_data=X_train,
+    test_data=X_test,
+    labels=Y_test,
+    timesteps=128,
+    features=1,
+    threshold_sigma=2.0,
+    loss_type='mse',
+    step_size=10,
+    latent_dim=32,   # pass along to LSTMAutoencoder, if it expects these
+    lstm_units=64
+)
+
+moe.train(epochs=50, batch_size=32, patience=10, optimizer='adam')
+moe.evaluate(batch_size=32)
+
+# Plot each expert alone
+moe.plot_expert1(save_path='expert1_alone.html')
+moe.plot_expert2(save_path='expert2_alone.html')
+# Plot final gating
+moe.plot_final_moe(save_path='moe_final.html')
+
+# Save sub-models
+moe.save_models(dir_path="moe_checkpoints")
