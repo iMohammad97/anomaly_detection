@@ -527,58 +527,94 @@ class TorchMoE:
     ###########################################################################
     def plot_final_moe(self, data_loader, plot_width=800):
         """
-        Runs self.evaluate(...) on data_loader to get final_errors, final_preds.
-        Plots the final gating-based anomaly detection vs. the true data and labels.
+        1) Calls self.evaluate(...) on data_loader for final gating approach
+        2) Extracts 'inputs', 'outputs', 'errors', 'predictions', 'anomalies'
+        3) Ensures 'anomalies' is 1D (one label per sample) so we can do anomalies[i] == 1
+        4) Plots final gating-based anomalies vs. the data
         """
+        import numpy as np
+        import plotly.graph_objects as go
+
+        # 1) Get final gating results
         results = self.evaluate(data_loader)
+        inputs = results['inputs']  # shape might be (N, features) or (N,)
+        outputs = results['outputs']  # same shape
+        errors = results['errors']  # shape (N,)
+        preds = results['predictions']  # shape (N,)
+        anomalies = results['anomalies']  # shape might be (N, window_size) or (N,) or ???
 
-        inputs = results['inputs'].squeeze()
-        outputs= results['outputs'].squeeze()  # note: mostly expert1's recon
-        errors = results['errors']
-        preds  = results['predictions']
-        anomalies = results['anomalies'].squeeze()
+        # 2) Squeeze / flatten the arrays if needed
+        # inputs and outputs typically shape (N, 1) if features=1, so we do .squeeze().
+        inputs = np.array(inputs).squeeze()
+        outputs = np.array(outputs).squeeze()
+        errors = np.array(errors).ravel()
+        preds = np.array(preds).ravel()
+        anomalies = np.array(anomalies)
 
+        # If anomalies is 2D with shape (N, window_size), you likely want the last time-step only:
+        # Or if you want to flatten everything, do anomalies.ravel().
+        if anomalies.ndim == 2 and anomalies.shape[1] == self.window_size:
+            anomalies = anomalies[:, -1]  # pick last time-step
+        anomalies = anomalies.ravel()  # now shape (N,)
+
+        # 3) Build final plot
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=list(range(len(inputs))),
-                                 y=inputs,
-                                 mode='lines',
-                                 name='Data',
-                                 line=dict(color='blue')))
-        fig.add_trace(go.Scatter(x=list(range(len(outputs))),
-                                 y=outputs,
-                                 mode='lines',
-                                 name='MoE Recon (Expert1 partial)',
-                                 line=dict(color='purple')))
-        fig.add_trace(go.Scatter(x=list(range(len(errors))),
-                                 y=errors,
-                                 mode='lines',
-                                 name='MoE Final Errors',
-                                 line=dict(color='red')))
+        # Plot data
+        fig.add_trace(go.Scatter(
+            x=list(range(len(inputs))),
+            y=inputs,
+            mode='lines',
+            name='Data',
+            line=dict(color='blue')
+        ))
+        # Plot recon (note: "final" is mostly from Expert1 in evaluate, but we keep it for reference)
+        fig.add_trace(go.Scatter(
+            x=list(range(len(outputs))),
+            y=outputs,
+            mode='lines',
+            name='MoE Recon (partial)',
+            line=dict(color='purple')
+        ))
+        # Plot final gating errors
+        fig.add_trace(go.Scatter(
+            x=list(range(len(errors))),
+            y=errors,
+            mode='lines',
+            name='MoE Final Errors',
+            line=dict(color='red')
+        ))
 
-        # Labeled anomalies
+        # 4) Labeled anomalies
         label_indices = [i for i in range(len(anomalies)) if anomalies[i] == 1]
         if label_indices:
-            fig.add_trace(go.Scatter(x=label_indices,
-                                     y=[inputs[i] for i in label_indices],
-                                     mode='markers',
-                                     name='Labels',
-                                     marker=dict(color='orange', size=7)))
+            fig.add_trace(go.Scatter(
+                x=label_indices,
+                y=[inputs[i] for i in label_indices],
+                mode='markers',
+                name='True Anomalies',
+                marker=dict(color='orange', size=7)
+            ))
 
-        # Pred anomalies
+        # 5) Predicted anomalies
         pred_indices = [i for i in range(len(preds)) if preds[i] == 1]
         if pred_indices:
-            fig.add_trace(go.Scatter(x=pred_indices,
-                                     y=[inputs[i] for i in pred_indices],
-                                     mode='markers',
-                                     name='MoE Anomalies',
-                                     marker=dict(color='black', size=7, symbol='x')))
+            fig.add_trace(go.Scatter(
+                x=pred_indices,
+                y=[inputs[i] for i in pred_indices],
+                mode='markers',
+                name='MoE Anomalies',
+                marker=dict(color='black', size=7, symbol='x')
+            ))
 
-        fig.update_layout(title='Final MoE Gating Results',
-                          xaxis_title='Time Steps',
-                          yaxis_title='Value',
-                          legend=dict(x=0, y=1, orientation='h'),
-                          template='plotly',
-                          width=plot_width)
+        # Final layout
+        fig.update_layout(
+            title='Final MoE Gating Results',
+            xaxis_title='Samples',
+            yaxis_title='Value',
+            legend=dict(x=0, y=1, orientation='h'),
+            template='plotly',
+            width=plot_width
+        )
         fig.show()
 
     ###########################################################################
