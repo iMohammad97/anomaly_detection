@@ -104,8 +104,8 @@ class TorchMoE:
         # Then we define a reference to the reconstruction loss function:
         loss_obj = self.expert1.select_loss(loss_name)
         # If it's a PyTorch module (e.g. MSELoss), move it to device
-        if isinstance(loss_obj, torch.nn.Module):
-            loss_obj = loss_obj.to(self.device)
+        # if isinstance(loss_obj, torch.nn.Module):
+            # loss_obj = loss_obj.to(self.device)
         recon_loss_func = loss_obj
 
         # We'll do multiple epochs
