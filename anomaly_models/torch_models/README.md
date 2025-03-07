@@ -219,9 +219,31 @@ model.learn(train_loader, n_epochs=10)
 model.plot_results(test_loader)
 ```
 
+## Residual FAE
+This model learns the difference of windows and reconstructed windows using another model.
+Since other models might have different `forward` methods, we use a `recon_index` to retrieve the reconstructed windows of the base model.
+
+sample usage:
+
+```python
+from anomaly_models.torch_models import ResidualFAE, FAE
+from utilities.torch_ucr import get_dataloaders
+
+# Dataset
+dataset_path = '../../UCR/UCR2_preprocessed'
+train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=256, batch_size=64)
+
+# Base Model
+base = FAE(window_size=256, device='cuda') # or device='cpu'
+
+# Training  
+model = ResidualFAE(window_size=256, device='cuda') 
+model.learn(train_loader, network=base, recon_index=1, n_epochs=10)
+model.plot_results(test_loader, network=base, recon_index=1)
+```
+
 ## Twin
 The window size will act as the larger frame for the _FAE_ and the `latent_dim` is the window size of a LSTM based _SAE_.
-
 
 sample usage:
 
