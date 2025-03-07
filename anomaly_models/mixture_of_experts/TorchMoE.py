@@ -84,94 +84,65 @@ class TorchMoE:
     ###########################################################################
     def train(self, train_loader, n_epochs=50, loss_name='MaxDiff'):
         """
-        Custom training loop with gating:
-          - For each batch:
-              1) Pass entire batch to expert1 => compute reconstruction + stationary losses
-              2) If error > threshold_e1 => sub-batch also passed to expert2
-              3) separate backward passes
-          - End of epoch => recompute threshold_e1 with mean+ sigma*std from entire dataset
-          - End => threshold_e2 from windows that pass
-        :param train_loader: DataLoader returning (data, anomaly) for each batch
-        :param n_epochs: number of epochs
-        :param loss_name: e.g. 'MaxDiff' or 'MSE', etc. (the Twin model's select_loss keys)
+        Custom training loop with gating...
         """
         self.loss_name = loss_name
-        # We'll define negative threshold so in the first epoch, everything passes to e2
+        # Initially set threshold so first epoch passes all sub-batch to Expert2
         self.threshold_e1 = -9999999.0
 
-        # Expert1, Expert2 => each already has an optimizer from Twin constructor
-        # We can confirm or override. We'll keep what's built in, i.e. self.expertX.optimizer
-        # Then we define a reference to the reconstruction loss function:
-        loss_obj = self.expert1.select_loss(loss_name)
-        # If it's a PyTorch module (e.g. MSELoss), move it to device
-        # if isinstance(loss_obj, torch.nn.Module):
-            # loss_obj = loss_obj.to(self.device)
-        recon_loss_func = loss_obj
+        # We'll keep the existing optimizers from the experts
+        # Just define the reconstruction function:
+        recon_loss_func = self.expert1.select_loss(loss_name)
+        # We DO NOT call .to(self.device) here for "MaxDiff" because it's just a function
 
-        # We'll do multiple epochs
         best_combined = np.inf
         patience = 10
         patience_counter = 0
 
         for epoch_i in trange(n_epochs, desc="MoE Training"):
-            # We'll store batch losses for e1, e2, so we can see how training is going
             e1_batch_losses = []
             e2_batch_losses = []
-
-            # We'll also gather all e1 errors for threshold update
             e1_errors_all = []
 
             for data_batch, _ in tqdm(train_loader, leave=False):
-                data_batch = data_batch.to(self.device)  # shape: (batch, window_size, features=1)
+                data_batch = data_batch.to(self.device)
 
-                # 1) forward pass on expert1
+                # ----- Expert1 forward -----
                 self.expert1.optimizer.zero_grad()
                 latent1, recon1 = self.expert1.forward(data_batch)
-                # measure reconstruction error (scalar)
-                # We'll do something akin to 'Twin' approach:
-                #   recon = recon_loss_func(recon1, data_batch)
-                recon_val = recon_loss_func(recon1, data_batch)
+
+                # Evaluate reconstruction
+                recon_val = recon_loss_func(recon1, data_batch)  # Works for MaxDiff or MSE
                 if loss_name == 'MaxDiff':
-                    # If it's a lambda returning max of abs error, that's a single value
+                    # e1_error_vec for gating => Max difference per sample
                     e1_error_vec = (recon1 - data_batch).abs().max(dim=2)[0].max(dim=1)[0]
                 else:
-                    # For MSE or Huber, we can get elementwise, then average
-                    # We'll define e1_error_vec as the per-sample error
-                    # MSELoss is "mean" by default, so we do a reduce=None approach
-                    # but our Twin's code lumps it. We'll do a simpler approach:
-                    # We'll forcibly compute per-sample MSE:
-                    e1_error_vec = torch.mean((recon1 - data_batch) ** 2, dim=(1,2))
+                    # e1_error_vec => MSE per sample
+                    e1_error_vec = torch.mean((recon1 - data_batch) ** 2, dim=(1, 2))
 
-                # stationary loss => (loss, mean_loss, std_loss) from Twin
+                # Stationary loss
                 sl, meanL, stdL = self.expert1.stationary_loss(latent1, per_batch=False)
-
-                # total loss for e1
                 loss_e1 = recon_val + sl
 
-                # We'll do backward
                 loss_e1.backward()
                 self.expert1.optimizer.step()
 
                 e1_batch_losses.append(loss_e1.item())
 
-                # 2) Gating => if e1_error_vec[i] > threshold => pass sub-batch[i] to expert2
+                # ----- Gating to Expert2 -----
                 pass_mask = (e1_error_vec > self.threshold_e1).detach().cpu().numpy()
                 pass_indices = np.where(pass_mask == True)[0]
                 if len(pass_indices) > 0:
-                    # build a sub-batch
                     sub_batch = data_batch[pass_indices]
                     self.expert2.optimizer.zero_grad()
                     latent2, recon2 = self.expert2.forward(sub_batch)
 
-                    # measure recon error
                     recon2_val = recon_loss_func(recon2, sub_batch)
-                    # stationary
-                    sl2, meanL2, stdL2 = self.expert2.stationary_loss(latent2, per_batch=False)
+                    sl2, _, _ = self.expert2.stationary_loss(latent2, per_batch=False)
                     loss_e2 = recon2_val + sl2
 
                     loss_e2.backward()
                     self.expert2.optimizer.step()
-
                     e2_batch_losses.append(loss_e2.item())
                 else:
                     e2_batch_losses.append(0.0)
@@ -179,24 +150,23 @@ class TorchMoE:
                 # gather e1_error_vec for threshold update
                 e1_errors_all.extend(e1_error_vec.detach().cpu().numpy())
 
-            # end of epoch => compute new threshold for e1
+            # End of epoch => update threshold_e1
             e1_errors_all = np.array(e1_errors_all)
             if len(e1_errors_all) > 0:
                 mean_e1 = e1_errors_all.mean()
                 std_e1 = e1_errors_all.std()
                 self.threshold_e1 = mean_e1 + self.threshold_sigma * std_e1
             else:
-                # fallback if no data
                 self.threshold_e1 = 9999999
 
-            # average losses
             epoch_e1 = np.mean(e1_batch_losses)
             epoch_e2 = np.mean(e2_batch_losses)
             combined = epoch_e1 + epoch_e2
 
-            print(f"[Epoch {epoch_i+1}/{n_epochs}] e1_loss={epoch_e1:.4f}, e2_loss={epoch_e2:.4f}, threshold_e1={self.threshold_e1:.4f}")
+            print(
+                f"[Epoch {epoch_i + 1}/{n_epochs}] e1_loss={epoch_e1:.4f}, e2_loss={epoch_e2:.4f}, threshold_e1={self.threshold_e1:.4f}")
 
-            # simple early stopping
+            # Simple early stopping
             if combined < best_combined:
                 best_combined = combined
                 patience_counter = 0
@@ -206,7 +176,7 @@ class TorchMoE:
                     print("Early stopping triggered.")
                     break
 
-        # Now compute threshold_e2 from the training set
+        # Finally compute threshold_e2
         self._compute_threshold_e2(train_loader, recon_loss_func)
 
     def _compute_threshold_e2(self, train_loader, recon_loss_func):
