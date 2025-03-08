@@ -82,43 +82,47 @@ class TorchMoETwinWindow:
     # Train with window-level gating
     ############################################################################
     def train(
-        self,
-        train_loader,
-        n_epochs=50,
-        seed=42,
-        loss_name='MaxDiff'
+            self,
+            train_loader,
+            n_epochs=50,
+            seed=42,
+            loss_name1='MSE_R2',
+            loss_name2='MaxDiff'
     ):
         """
-        Window-level gating approach:
-          For each batch:
-             1) Expert1 forward pass for entire batch => recon error PER SAMPLE
-             2) For samples whose error > threshold_e1 => pass them to expert2
-             3) Two separate gradient updates
-          end of epoch => threshold_e1 from distribution of e1 errors
-          final => threshold_e2 from distribution of e2 errors
+        Window-level gating approach, adapted to match the new Twin.learn logic:
+        using 2 losses:
+            recon = recon_loss1(x, d) + recon_loss2(x[:, -self.latent_dim:], d[:, -self.latent_dim:])
+        Then add stationary losses (mean + std).
         """
+
         torch.manual_seed(seed)
         self.expert1.train()
         self.expert2.train()
 
-        recon_loss_fn = self.expert1.select_loss(loss_name)
+        # Create 2 recon loss funcs for each expert, as in your new Twin.learn
+        recon_loss1_e1 = self.expert1.select_loss(loss_name1)
+        recon_loss2_e1 = self.expert1.select_loss(loss_name2)
 
-        # Outer loop over epochs
+        recon_loss1_e2 = self.expert2.select_loss(loss_name1)
+        recon_loss2_e2 = self.expert2.select_loss(loss_name2)
+
+        # We do an outer loop over epochs
         for epoch_i in trange(n_epochs, desc="MoE Train (Window-level)"):
             e1_errors_all = []
             e2_errors_all = []
 
             e1_recon_list = []
-            e1_mean_list  = []
-            e1_std_list   = []
+            e1_mean_list = []
+            e1_std_list = []
             e2_recon_list = []
-            e2_mean_list  = []
-            e2_std_list   = []
+            e2_mean_list = []
+            e2_std_list = []
 
             for (d, a) in tqdm(train_loader, leave=False):
                 d = d.to(self.device)
 
-                # Zero grads
+                # Zero grads (we'll do partial sub-batch updates)
                 self.expert1.optimizer.zero_grad()
                 self.expert2.optimizer.zero_grad()
 
@@ -126,81 +130,67 @@ class TorchMoETwinWindow:
                 # 1) Expert1 forward for entire batch
                 ############################################
                 latent1, x1 = self.expert1.forward(d)
-                recon_errors_1 = recon_loss_fn(x1, d)  # scalar if 'MaxDiff'
-                # But we want per-sample error => must replicate how Twin predict does it:
-                # We'll do MSE for each sample to do gating. Or if user wants MaxDiff, we do that per sample.
-                # Let's do a custom approach: we measure the last point or something like Twin's predict?
-
-                # We'll replicate Twin's "predict" logic:
-                # We'll do MSELoss(reduction='none') ourselves for gating
-                # Then sum or average across dimension?
-                mse_full = torch.nn.MSELoss(reduction='none').to(self.device)
-                full_e1 = mse_full(x1, d)  # shape [batch, window_size, n_features]
-                # Like Twin, we do last-step error + window_coef * mean
-                # We'll define window_coef = 0.2 (like Twin)
-                window_coef = 0.2
-                # last-step error:
-                e1_last = full_e1[:, -1]  # shape [batch, n_features]
-                e1_last = torch.mean(e1_last, dim=1)  # shape [batch]
-                # mean over entire window
-                e1_mean = torch.mean(full_e1, dim=(1,2))  # shape [batch]
-                gating_error_1 = e1_last + window_coef * e1_mean  # shape [batch]
-
-                # Now also compute the stationary losses for entire batch
-                # We'll define station_loss_1 as sum over batch
-                total_recon1 = recon_errors_1  # a scalar
+                # Summation of two losses on full window and last latent_dim steps
+                recon_1 = recon_loss1_e1(x1, d) + \
+                          recon_loss2_e1(x1[:, -self.latent_dim:], d[:, -self.latent_dim:])
+                # Stationary
                 _, mean1, std1 = self.expert1.stationary_loss(latent1)
-                total_loss_e1 = total_recon1 + mean1 + std1
+                total_loss_e1 = recon_1 + mean1 + std1
 
-                # Backprop e1
                 total_loss_e1.backward()
                 self.expert1.optimizer.step()
 
-                # Store e1 stats
-                e1_recon_list.append(float(recon_errors_1.item()))
+                # For gating, we replicate the "predict" logic using a partial MSE approach:
+                # i.e., last-step error + window_coef * mean
+                # We'll define window_coef=0.2
+                # We'll do a standard MSELoss(reduction='none') approach:
+                window_coef = 0.2
+                mse_full = torch.nn.MSELoss(reduction='none').to(self.device)
+                full_e1 = mse_full(x1, d)  # shape [batch, window_size, n_features]
+                e1_last = full_e1[:, -1].mean(dim=1)  # shape [batch]
+                e1_mean = full_e1.mean(dim=(1, 2))  # shape [batch]
+                gating_error_1 = e1_last + window_coef * e1_mean
+
+                # Log e1 stats
+                e1_recon_list.append(float(recon_1.item()))
                 e1_mean_list.append(mean1.item())
                 e1_std_list.append(std1.item())
 
-                # We'll record gating_error_1 in e1_errors_all for threshold
-                # We do "mean" or "max"? We'll do each sample's gating_error
+                # Gather gating_error_1 for threshold
                 e1_errors_all.extend(gating_error_1.detach().cpu().numpy())
 
                 ############################################
-                # 2) Gating => pass sub-batch to e2
+                # 2) Gating => pass sub-batch to Expert2
                 ############################################
-                pass_mask = gating_error_1 > self.threshold_e1  # shape [batch]
+                # Squeeze to ensure gating_error_1 is shape [batch]
+                pass_mask = gating_error_1 > self.threshold_e1
                 if pass_mask.any():
-                    d_pass = d[pass_mask]  # shape [some, window_size, n_features]
+                    d_pass = d[pass_mask]
 
-                    # forward e2
                     latent2, x2 = self.expert2.forward(d_pass)
-                    recon_errors_2 = recon_loss_fn(x2, d_pass)
-
-                    # again for e2 gating stats
-                    # We'll do the same approach with MSELoss to measure e2 error
-                    mse_full_2 = torch.nn.MSELoss(reduction='none').to(self.device)
-                    full_e2 = mse_full_2(x2, d_pass)
-                    e2_last = full_e2[:, -1]
-                    e2_last = torch.mean(e2_last, dim=1)
-                    e2_mean = torch.mean(full_e2, dim=(1,2))
-                    gating_error_2 = e2_last + window_coef * e2_mean
-
+                    recon_2 = recon_loss1_e2(x2, d_pass) + \
+                              recon_loss2_e2(x2[:, -self.latent_dim:], d_pass[:, -self.latent_dim:])
                     _, mean2, std2 = self.expert2.stationary_loss(latent2)
-                    total_loss_e2 = recon_errors_2 + mean2 + std2
+                    total_loss_e2 = recon_2 + mean2 + std2
 
-                    # zero e2 grad again? or do we keep?
-                    # Typically we do a fresh backward pass
                     self.expert2.optimizer.zero_grad()
                     total_loss_e2.backward()
                     self.expert2.optimizer.step()
 
-                    e2_recon_list.append(float(recon_errors_2.item()))
+                    e2_recon_list.append(float(recon_2.item()))
                     e2_mean_list.append(mean2.item())
                     e2_std_list.append(std2.item())
 
+                    # Also measure gating error for e2
+                    # We'll do the same approach for partial sub-batch:
+                    mse_full_2 = torch.nn.MSELoss(reduction='none').to(self.device)
+                    full_e2 = mse_full_2(x2, d_pass)
+                    e2_last = full_e2[:, -1].mean(dim=1)
+                    e2_mean = full_e2.mean(dim=(1, 2))
+                    gating_error_2 = e2_last + window_coef * e2_mean
                     e2_errors_all.extend(gating_error_2.detach().cpu().numpy())
                 else:
-                    # no pass => no update for e2
+                    # no pass => no update on expert2 for this batch
                     e2_recon_list.append(0)
                     e2_mean_list.append(0)
                     e2_std_list.append(0)
@@ -208,7 +198,7 @@ class TorchMoETwinWindow:
             # End of epoch => compute threshold_e1
             e1_errors_all = np.array(e1_errors_all)
             mean_e1 = np.mean(e1_errors_all)
-            std_e1  = np.std(e1_errors_all)
+            std_e1 = np.std(e1_errors_all)
             self.threshold_e1 = mean_e1 + self.threshold_sigma * std_e1
             self.thresholds_e1.append(self.threshold_e1)
 
@@ -216,7 +206,7 @@ class TorchMoETwinWindow:
             self.losses_e1.append(np.mean(e1_recon_list))
             self.losses_e2.append(np.mean(e2_recon_list))
 
-            print(f"[Epoch {epoch_i+1}/{n_epochs}] E1 Recon={np.mean(e1_recon_list):.4f}, "
+            print(f"[Epoch {epoch_i + 1}/{n_epochs}] E1 Recon={np.mean(e1_recon_list):.4f}, "
                   f"E2 Recon={np.mean(e2_recon_list):.4f}, threshold_e1={self.threshold_e1:.4f}")
 
         # After all epochs => threshold_e2
@@ -230,6 +220,156 @@ class TorchMoETwinWindow:
             self.threshold_e2 = mean_e2 + self.threshold_sigma * std_e2
         self.thresholds_e2 = self.threshold_e2
         print(f"--> Final threshold_e2={self.threshold_e2:.4f}")
+
+    # def train(
+    #     self,
+    #     train_loader,
+    #     n_epochs=50,
+    #     seed=42,
+    #     loss_name='MaxDiff'
+    # ):
+    #     """
+    #     Window-level gating approach:
+    #       For each batch:
+    #          1) Expert1 forward pass for entire batch => recon error PER SAMPLE
+    #          2) For samples whose error > threshold_e1 => pass them to expert2
+    #          3) Two separate gradient updates
+    #       end of epoch => threshold_e1 from distribution of e1 errors
+    #       final => threshold_e2 from distribution of e2 errors
+    #     """
+    #     torch.manual_seed(seed)
+    #     self.expert1.train()
+    #     self.expert2.train()
+    #
+    #     recon_loss_fn = self.expert1.select_loss(loss_name)
+    #
+    #     # Outer loop over epochs
+    #     for epoch_i in trange(n_epochs, desc="MoE Train (Window-level)"):
+    #         e1_errors_all = []
+    #         e2_errors_all = []
+    #
+    #         e1_recon_list = []
+    #         e1_mean_list  = []
+    #         e1_std_list   = []
+    #         e2_recon_list = []
+    #         e2_mean_list  = []
+    #         e2_std_list   = []
+    #
+    #         for (d, a) in tqdm(train_loader, leave=False):
+    #             d = d.to(self.device)
+    #
+    #             # Zero grads
+    #             self.expert1.optimizer.zero_grad()
+    #             self.expert2.optimizer.zero_grad()
+    #
+    #             ############################################
+    #             # 1) Expert1 forward for entire batch
+    #             ############################################
+    #             latent1, x1 = self.expert1.forward(d)
+    #             recon_errors_1 = recon_loss_fn(x1, d)  # scalar if 'MaxDiff'
+    #             # But we want per-sample error => must replicate how Twin predict does it:
+    #             # We'll do MSE for each sample to do gating. Or if user wants MaxDiff, we do that per sample.
+    #             # Let's do a custom approach: we measure the last point or something like Twin's predict?
+    #
+    #             # We'll replicate Twin's "predict" logic:
+    #             # We'll do MSELoss(reduction='none') ourselves for gating
+    #             # Then sum or average across dimension?
+    #             mse_full = torch.nn.MSELoss(reduction='none').to(self.device)
+    #             full_e1 = mse_full(x1, d)  # shape [batch, window_size, n_features]
+    #             # Like Twin, we do last-step error + window_coef * mean
+    #             # We'll define window_coef = 0.2 (like Twin)
+    #             window_coef = 0.2
+    #             # last-step error:
+    #             e1_last = full_e1[:, -1]  # shape [batch, n_features]
+    #             e1_last = torch.mean(e1_last, dim=1)  # shape [batch]
+    #             # mean over entire window
+    #             e1_mean = torch.mean(full_e1, dim=(1,2))  # shape [batch]
+    #             gating_error_1 = e1_last + window_coef * e1_mean  # shape [batch]
+    #
+    #             # Now also compute the stationary losses for entire batch
+    #             # We'll define station_loss_1 as sum over batch
+    #             total_recon1 = recon_errors_1  # a scalar
+    #             _, mean1, std1 = self.expert1.stationary_loss(latent1)
+    #             total_loss_e1 = total_recon1 + mean1 + std1
+    #
+    #             # Backprop e1
+    #             total_loss_e1.backward()
+    #             self.expert1.optimizer.step()
+    #
+    #             # Store e1 stats
+    #             e1_recon_list.append(float(recon_errors_1.item()))
+    #             e1_mean_list.append(mean1.item())
+    #             e1_std_list.append(std1.item())
+    #
+    #             # We'll record gating_error_1 in e1_errors_all for threshold
+    #             # We do "mean" or "max"? We'll do each sample's gating_error
+    #             e1_errors_all.extend(gating_error_1.detach().cpu().numpy())
+    #
+    #             ############################################
+    #             # 2) Gating => pass sub-batch to e2
+    #             ############################################
+    #             pass_mask = gating_error_1 > self.threshold_e1  # shape [batch]
+    #             if pass_mask.any():
+    #                 d_pass = d[pass_mask]  # shape [some, window_size, n_features]
+    #
+    #                 # forward e2
+    #                 latent2, x2 = self.expert2.forward(d_pass)
+    #                 recon_errors_2 = recon_loss_fn(x2, d_pass)
+    #
+    #                 # again for e2 gating stats
+    #                 # We'll do the same approach with MSELoss to measure e2 error
+    #                 mse_full_2 = torch.nn.MSELoss(reduction='none').to(self.device)
+    #                 full_e2 = mse_full_2(x2, d_pass)
+    #                 e2_last = full_e2[:, -1]
+    #                 e2_last = torch.mean(e2_last, dim=1)
+    #                 e2_mean = torch.mean(full_e2, dim=(1,2))
+    #                 gating_error_2 = e2_last + window_coef * e2_mean
+    #
+    #                 _, mean2, std2 = self.expert2.stationary_loss(latent2)
+    #                 total_loss_e2 = recon_errors_2 + mean2 + std2
+    #
+    #                 # zero e2 grad again? or do we keep?
+    #                 # Typically we do a fresh backward pass
+    #                 self.expert2.optimizer.zero_grad()
+    #                 total_loss_e2.backward()
+    #                 self.expert2.optimizer.step()
+    #
+    #                 e2_recon_list.append(float(recon_errors_2.item()))
+    #                 e2_mean_list.append(mean2.item())
+    #                 e2_std_list.append(std2.item())
+    #
+    #                 e2_errors_all.extend(gating_error_2.detach().cpu().numpy())
+    #             else:
+    #                 # no pass => no update for e2
+    #                 e2_recon_list.append(0)
+    #                 e2_mean_list.append(0)
+    #                 e2_std_list.append(0)
+    #
+    #         # End of epoch => compute threshold_e1
+    #         e1_errors_all = np.array(e1_errors_all)
+    #         mean_e1 = np.mean(e1_errors_all)
+    #         std_e1  = np.std(e1_errors_all)
+    #         self.threshold_e1 = mean_e1 + self.threshold_sigma * std_e1
+    #         self.thresholds_e1.append(self.threshold_e1)
+    #
+    #         # record average e1,e2 recon
+    #         self.losses_e1.append(np.mean(e1_recon_list))
+    #         self.losses_e2.append(np.mean(e2_recon_list))
+    #
+    #         print(f"[Epoch {epoch_i+1}/{n_epochs}] E1 Recon={np.mean(e1_recon_list):.4f}, "
+    #               f"E2 Recon={np.mean(e2_recon_list):.4f}, threshold_e1={self.threshold_e1:.4f}")
+    #
+    #     # After all epochs => threshold_e2
+    #     e2_errors_all = np.array(e2_errors_all)
+    #     e2_errors_all = e2_errors_all[e2_errors_all > 0]  # only non-zero
+    #     if len(e2_errors_all) == 0:
+    #         self.threshold_e2 = 9999999
+    #     else:
+    #         mean_e2 = np.mean(e2_errors_all)
+    #         std_e2  = np.std(e2_errors_all)
+    #         self.threshold_e2 = mean_e2 + self.threshold_sigma * std_e2
+    #     self.thresholds_e2 = self.threshold_e2
+    #     print(f"--> Final threshold_e2={self.threshold_e2:.4f}")
 
     ############################################################################
     # Plot each expert alone ignoring gating
