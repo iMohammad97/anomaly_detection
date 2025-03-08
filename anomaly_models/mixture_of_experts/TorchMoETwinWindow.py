@@ -467,6 +467,7 @@ class TorchMoETwinWindow:
                 rec_err1 = rec_err1[:, -1] + window_coef*torch.mean(rec_err1, dim=1)
                 rec_err1_vals = rec_err1.cpu().numpy().squeeze()
 
+                rec_err1 = rec_err1.squeeze(-1)
                 pass_mask = rec_err1 > self.threshold_e1  # shape [batch]
                 # We'll do partial sub-batch for e2
                 d_pass = window[pass_mask]
