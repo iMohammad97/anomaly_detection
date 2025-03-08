@@ -97,7 +97,7 @@ class TorchMoE:
         recon_loss_func = self.expert1.select_loss(loss_name)
 
         best_combined = math.inf
-        patience = 10
+        patience = 100
         patience_counter = 0
 
         # Assume expert1.train_data_window exists (set by your ExpertClass)
