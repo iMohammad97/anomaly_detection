@@ -4,48 +4,46 @@ import numpy as np
 import os
 from tqdm.notebook import trange, tqdm
 import plotly.graph_objects as go
-import math
 
-
+###############################################################################
+# TorchMoE class
+###############################################################################
 class TorchMoE:
     """
-    A 2-expert Mixture-of-Experts for Torch models with dynamic threshold gating.
+    A 2-expert Mixture-of-Experts class for Torch-based models with dynamic threshold gating:
+      1) expert1 sees every batch
+      2) if reconstruction error > dynamic threshold => pass sub-batch to expert2
+      3) separate gradient updates for each sub-expert
+      4) dynamic threshold update at end of each epoch for expert1
+      5) separate threshold for expert2 from windows that actually pass
 
-    The class instantiates two copies (expert1 and expert2) of a given ExpertClass
-    (e.g. Twin). During training, every batch is fed through expert1;
-    if a window’s reconstruction error exceeds a dynamic threshold (threshold_e1),
-    that window is also passed to expert2 and updated separately.
+    This design specifically integrates two copies of 'Twin' (or any Torch model
+    following a similar "forward" + "stationary_loss" pattern).
 
-    At the end of training, a separate threshold_e2 is computed from those windows
-    that passed expert1. In evaluation, each window’s final error is chosen as:
-       - expert1 error if not passed, or
-       - expert2 error if passed.
-    A window is predicted anomalous if its final error exceeds threshold_e2.
-
-    The class provides plotting methods for:
-      • Expert1 alone (ignoring gating),
-      • Expert2 alone,
-      • The final MoE (gated) results.
-
-    It also supports saving and loading the experts’ state.
+    USAGE:
+      - Instantiate with ExpertClass=Twin (or our Torch model) and relevant hyperparams.
+      - call .train(train_loader, n_epochs=..., loss_name='MaxDiff', ...)
+      - call .evaluate(test_loader)
+      - call .plot_expert1(test_loader), .plot_expert2(test_loader), .plot_final_moe(test_loader)
     """
 
     def __init__(
-            self,
-            ExpertClass,
-            window_size=256,
-            device='cpu',
-            threshold_sigma=2.0,
-            seed=0,
-            **expert_kwargs
+        self,
+        ExpertClass,
+        window_size=256,
+        device='cpu',
+        threshold_sigma=2.0,
+        seed=0,
+        # Additional arguments to pass to the ExpertClass
+        **expert_kwargs
     ):
         """
-        :param ExpertClass: Torch model class (e.g. Twin)
-        :param window_size: Sliding window size.
+        :param ExpertClass: A Torch model class, e.g. Twin
+        :param window_size: Sliding window size
         :param device: 'cpu' or 'cuda'
-        :param threshold_sigma: Dynamic threshold = mean + sigma * std.
-        :param seed: Random seed.
-        :param expert_kwargs: Extra parameters passed to ExpertClass.
+        :param threshold_sigma: dynamic threshold = mean + sigma * std
+        :param seed: random seed
+        :param expert_kwargs: additional config passed to each expert's constructor
         """
         torch.manual_seed(seed)
         self.seed = seed
@@ -53,114 +51,113 @@ class TorchMoE:
         self.window_size = window_size
         self.threshold_sigma = threshold_sigma
 
-        # Instantiate two experts (they are assumed to have attributes:
-        # .model, .train_data_window, .test_data_window, .optimizer, and methods forward() and stationary_loss())
-        self.expert1 = ExpertClass(window_size=self.window_size, device=self.device, seed=self.seed, **expert_kwargs)
-        self.expert2 = ExpertClass(window_size=self.window_size, device=self.device, seed=self.seed + 123,
-                                   **expert_kwargs)
+        # Build two sub-experts
+        self.expert1 = ExpertClass(
+            window_size=self.window_size,
+            device=self.device,
+            seed=self.seed,
+            **expert_kwargs
+        )
+        self.expert2 = ExpertClass(
+            window_size=self.window_size,
+            device=self.device,
+            seed=self.seed + 123,
+            **expert_kwargs
+        )
 
-        # Gating thresholds (will be updated during training)
+        # Each expert will have its own optimizer, defined later
+        # But the 'Twin' constructor already defines self.optimizer, etc.
+        # We'll override or re-init if we want separate configs.
+
+        # Gating thresholds
         self.threshold_e1 = 0.0
         self.threshold_e2 = 0.0
 
-        # Final evaluation results (per window)
+        # Final gating results
         self.final_errors = None
         self.final_preds = None
 
-        # For evaluation/plotting, these will be computed from the data loader;
-        # they are expected to be computed per window (not per time step)
         self.loss_name = None
 
     ###########################################################################
-    # TRAINING
+    # 1) TRAIN with gating
     ###########################################################################
     def train(self, train_loader, n_epochs=50, loss_name='MaxDiff'):
         """
-        Custom training loop with gating:
-          - For each batch from train_loader:
-              * Forward pass through expert1.
-              * Compute reconstruction error (e1_err) using the loss function from select_loss.
-              * If e1_err > threshold_e1, pass those windows to expert2.
-              * Compute a "stationary loss" (from each expert’s stationary_loss() method)
-                and update expert1 and expert2 separately.
-          - End of each epoch, update threshold_e1 = mean(e1_errors) + sigma * std(e1_errors).
-          - After training, compute threshold_e2 from windows that passed expert1.
-        :param train_loader: DataLoader returning (data, anomaly) pairs.
-        :param n_epochs: Number of epochs.
-        :param loss_name: Loss key string (e.g. "MaxDiff" or "MSE").
+        Custom training loop with gating...
         """
         self.loss_name = loss_name
-        # For the first epoch, set threshold_e1 very low so that all windows pass to expert2.
+        # Initially set threshold so first epoch passes all sub-batch to Expert2
         self.threshold_e1 = -9999999.0
 
-        # Get the reconstruction loss function from expert1; note: for MaxDiff it returns a lambda (do not call .to(device))
+        # We'll keep the existing optimizers from the experts
+        # Just define the reconstruction function:
         recon_loss_func = self.expert1.select_loss(loss_name)
+        # We DO NOT call .to(self.device) here for "MaxDiff" because it's just a function
 
-        best_combined = math.inf
-        patience = 100
+        best_combined = np.inf
+        patience = 10000
         patience_counter = 0
-
-        # Assume expert1.train_data_window exists (set by your ExpertClass)
-        # Here we use the provided train_loader (which yields batches of windows).
-        dataset = train_loader  # train_loader is assumed to yield (data_batch, anomaly)
 
         for epoch_i in trange(n_epochs, desc="MoE Training"):
             e1_batch_losses = []
             e2_batch_losses = []
             e1_errors_all = []
 
-            for data_batch, _ in tqdm(dataset, leave=False):
+            for data_batch, _ in tqdm(train_loader, leave=False):
                 data_batch = data_batch.to(self.device)
 
-                # ----- Expert1 forward pass -----
+                # ----- Expert1 forward -----
                 self.expert1.optimizer.zero_grad()
                 latent1, recon1 = self.expert1.forward(data_batch)
 
-                # Compute reconstruction error per sample:
+                # Evaluate reconstruction
+                recon_val = recon_loss_func(recon1, data_batch)  # Works for MaxDiff or MSE
                 if loss_name == 'MaxDiff':
-                    e1_err = (recon1 - data_batch).abs().max(dim=2)[0].max(dim=1)[0]
-                    loss_e1 = torch.mean(e1_err)
+                    # e1_error_vec for gating => Max difference per sample
+                    e1_error_vec = (recon1 - data_batch).abs().max(dim=2)[0].max(dim=1)[0]
                 else:
-                    e1_err = torch.mean((recon1 - data_batch) ** 2, dim=(1, 2))
-                    loss_e1 = torch.mean(e1_err)
+                    # e1_error_vec => MSE per sample
+                    e1_error_vec = torch.mean((recon1 - data_batch) ** 2, dim=(1, 2))
 
-                # Get stationary loss from expert1
-                sl, _, _ = self.expert1.stationary_loss(latent1, per_batch=False)
-                loss_e1_total = loss_e1 + sl
+                # Stationary loss
+                sl, meanL, stdL = self.expert1.stationary_loss(latent1, per_batch=False)
+                loss_e1 = recon_val + sl
 
-                loss_e1_total.backward()
+                loss_e1.backward()
                 self.expert1.optimizer.step()
-                e1_batch_losses.append(loss_e1_total.item())
-                e1_errors_all.extend(e1_err.detach().cpu().numpy())
 
-                # ----- Gating: Pass sub-batch to Expert2 if e1_err > threshold_e1 -----
-                pass_mask = (e1_err > self.threshold_e1).detach().cpu().numpy()
-                pass_indices = np.where(pass_mask)[0]
+                e1_batch_losses.append(loss_e1.item())
+
+                # ----- Gating to Expert2 -----
+                pass_mask = (e1_error_vec > self.threshold_e1).detach().cpu().numpy()
+                pass_indices = np.where(pass_mask == True)[0]
                 if len(pass_indices) > 0:
                     sub_batch = data_batch[pass_indices]
                     self.expert2.optimizer.zero_grad()
                     latent2, recon2 = self.expert2.forward(sub_batch)
-                    if loss_name == 'MaxDiff':
-                        e2_err = (recon2 - sub_batch).abs().max(dim=2)[0].max(dim=1)[0]
-                        loss_e2 = torch.mean(e2_err)
-                    else:
-                        e2_err = torch.mean((recon2 - sub_batch) ** 2, dim=(1, 2))
-                        loss_e2 = torch.mean(e2_err)
-                    sl2, _, _ = self.expert2.stationary_loss(latent2, per_batch=False)
-                    loss_e2_total = loss_e2 + sl2
 
-                    loss_e2_total.backward()
+                    recon2_val = recon_loss_func(recon2, sub_batch)
+                    sl2, _, _ = self.expert2.stationary_loss(latent2, per_batch=False)
+                    loss_e2 = recon2_val + sl2
+
+                    loss_e2.backward()
                     self.expert2.optimizer.step()
-                    e2_batch_losses.append(loss_e2_total.item())
+                    e2_batch_losses.append(loss_e2.item())
                 else:
                     e2_batch_losses.append(0.0)
 
-            # End of epoch: update threshold_e1 from all e1 errors
+                # gather e1_error_vec for threshold update
+                e1_errors_all.extend(e1_error_vec.detach().cpu().numpy())
+
+            # End of epoch => update threshold_e1
             e1_errors_all = np.array(e1_errors_all)
             if len(e1_errors_all) > 0:
-                self.threshold_e1 = e1_errors_all.mean() + self.threshold_sigma * e1_errors_all.std()
+                mean_e1 = e1_errors_all.mean()
+                std_e1 = e1_errors_all.std()
+                self.threshold_e1 = mean_e1 + self.threshold_sigma * std_e1
             else:
-                self.threshold_e1 = 9999999.0
+                self.threshold_e1 = 9999999
 
             epoch_e1 = np.mean(e1_batch_losses)
             epoch_e2 = np.mean(e2_batch_losses)
@@ -169,6 +166,7 @@ class TorchMoE:
             print(
                 f"[Epoch {epoch_i + 1}/{n_epochs}] e1_loss={epoch_e1:.4f}, e2_loss={epoch_e2:.4f}, threshold_e1={self.threshold_e1:.4f}")
 
+            # Simple early stopping
             if combined < best_combined:
                 best_combined = combined
                 patience_counter = 0
@@ -178,149 +176,175 @@ class TorchMoE:
                     print("Early stopping triggered.")
                     break
 
-        # Finally, compute threshold_e2 using the training set:
+        # Finally compute threshold_e2
         self._compute_threshold_e2(train_loader, recon_loss_func)
 
     def _compute_threshold_e2(self, train_loader, recon_loss_func):
-        """
-        Computes threshold_e2 from all training windows that pass expert1's threshold.
-        """
         e2_error_list = []
+
         for data_batch, _ in train_loader:
             data_batch = data_batch.to(self.device)
             latent1, recon1 = self.expert1.forward(data_batch)
             if self.loss_name == 'MaxDiff':
-                e1_err = (recon1 - data_batch).abs().max(dim=2)[0].max(dim=1)[0]
+                e1_error_vec = (recon1 - data_batch).abs().max(dim=2)[0].max(dim=1)[0]
             else:
-                e1_err = torch.mean((recon1 - data_batch) ** 2, dim=(1, 2))
-            pass_mask = (e1_err > self.threshold_e1).cpu().numpy()
-            pass_indices = np.where(pass_mask)[0]
+                e1_error_vec = torch.mean((recon1 - data_batch) ** 2, dim=(1, 2))
+
+            pass_mask = (e1_error_vec > self.threshold_e1).cpu().numpy()
+            pass_indices = np.where(pass_mask == True)[0]
             if len(pass_indices) == 0:
                 continue
+
             sub_batch = data_batch[pass_indices]
             latent2, recon2 = self.expert2.forward(sub_batch)
             if self.loss_name == 'MaxDiff':
                 e2_sub_vec = (recon2 - sub_batch).abs().max(dim=2)[0].max(dim=1)[0]
             else:
                 e2_sub_vec = torch.mean((recon2 - sub_batch) ** 2, dim=(1, 2))
-            e2_error_list.extend(e2_sub_vec.detach().cpu().numpy())
+
+            # ==> DETACH HERE <==
+            e2_sub_vec_np = e2_sub_vec.detach().cpu().numpy()
+            e2_error_list.extend(e2_sub_vec_np)
+
         if len(e2_error_list) == 0:
-            self.threshold_e2 = 9999999.0
+            self.threshold_e2 = 9999999
         else:
             arr = np.array(e2_error_list)
             self.threshold_e2 = arr.mean() + self.threshold_sigma * arr.std()
+
         print(f"[Gating] threshold_e2 = {self.threshold_e2:.4f}")
 
     ###########################################################################
-    # EVALUATION
+    # 2) EVALUATE (final gating) on a dataset
     ###########################################################################
     def evaluate(self, data_loader, window_coef=0.2):
         """
-        Evaluates the final gating on the dataset from data_loader.
-        For each window:
-          - Compute expert1 reconstruction error.
-          - If error > threshold_e1, compute expert2 error.
-          - Final error = expert1 error (if not passed) or expert2 error (if passed).
-          - Final prediction: 1 if final error > threshold_e2, else 0.
-        Also collects:
-          - inputs: last time-step of each window from data.
-          - outputs: last time-step of expert1 reconstruction.
-          - anomalies: last time-step label of each window.
-        Returns a dict with keys: 'inputs', 'outputs', 'errors', 'predictions', 'anomalies'.
+        Runs final gating:
+          - if e1_error <= threshold_e1 => normal
+          - else => pass to e2 => if e2_error > threshold_e2 => anomaly
+        We store final errors & preds in self.final_errors, self.final_preds
         """
-        self.eval()
-        inputs_list = []
-        outputs_list = []
         errors_list = []
-        pred_list = []
-        anomaly_list = []
+        pred_list   = []
+        all_anomalies = []
 
-        # Define loss function for reconstruction error per window:
-        if self.loss_name == 'MaxDiff':
-            def loss_fn(x, y):
-                return torch.max(torch.abs(x - y), dim=2)[0].max(dim=1)[0]
-        else:
-            def loss_fn(x, y):
-                return torch.mean((x - y) ** 2, dim=(1, 2))
+        inputs_list   = []
+        rec_list      = []
+        # We'll replicate the logic from each sub-expert's 'predict' approach
 
         with torch.no_grad():
             for data_batch, anomalies in data_loader:
                 data_batch = data_batch.to(self.device)
-                latent, recon1 = self.expert1.forward(data_batch)
+                # e1 forward
+                latent1, recon1 = self.expert1.forward(data_batch)
                 if self.loss_name == 'MaxDiff':
-                    e1_err = (recon1 - data_batch).abs().max(dim=2)[0].max(dim=1)[0]
+                    e1_err_vec = (recon1 - data_batch).abs().max(dim=2)[0].max(dim=1)[0]
                 else:
-                    e1_err = torch.mean((recon1 - data_batch) ** 2, dim=(1, 2))
-                pass_mask = (e1_err > self.threshold_e1)
-                e2_err = torch.zeros_like(e1_err)
-                if pass_mask.sum() > 0:
-                    sub_batch = data_batch[pass_mask]
+                    e1_err_vec = torch.mean((recon1 - data_batch) ** 2, dim=(1,2))
+
+                # gating
+                pass_mask = (e1_err_vec > self.threshold_e1)
+                pass_indices = pass_mask.nonzero(as_tuple=True)[0]
+
+                # For sub-batch that passes
+                e2_errors = torch.zeros_like(e1_err_vec)
+                e2_errors[pass_indices] = -1.0  # placeholder
+
+                if len(pass_indices) > 0:
+                    sub_batch = data_batch[pass_indices]
                     latent2, recon2 = self.expert2.forward(sub_batch)
                     if self.loss_name == 'MaxDiff':
-                        e2_err_sub = (recon2 - sub_batch).abs().max(dim=2)[0].max(dim=1)[0]
+                        e2_err_vec = (recon2 - sub_batch).abs().max(dim=2)[0].max(dim=1)[0]
                     else:
-                        e2_err_sub = torch.mean((recon2 - sub_batch) ** 2, dim=(1, 2))
-                    e2_err[pass_mask] = e2_err_sub
+                        e2_err_vec = torch.mean((recon2 - sub_batch) ** 2, dim=(1,2))
+                    # place them back
+                    for i, idx in enumerate(pass_indices):
+                        e2_errors[idx] = e2_err_vec[i]
 
-                final_err = torch.where(pass_mask, e2_err, e1_err)
-                final_pred = (final_err > self.threshold_e2).long()
+                # final error: if pass => e2_errors, else e1_err_vec
+                final_err = []
+                final_pred = []
+                for i in range(len(e1_err_vec)):
+                    if pass_mask[i].item() == 0:
+                        # didn't pass => e1
+                        fe = e1_err_vec[i].item()
+                        final_err.append(fe)
+                        # below threshold => normal
+                        final_pred.append(0)
+                    else:
+                        # pass => e2
+                        fe = e2_errors[i].item()
+                        final_err.append(fe)
+                        if fe > self.threshold_e2:
+                            final_pred.append(1)
+                        else:
+                            final_pred.append(0)
 
-                # For plotting, take the last time-step of each window (assume data shape (B, window_size, features))
-                inputs_list.append(data_batch.cpu().numpy()[:, -1, :])
-                outputs_list.append(recon1.cpu().numpy()[:, -1, :])
-                errors_list.append(final_err.cpu().numpy())
-                pred_list.append(final_pred.cpu().numpy())
-                # Process anomalies: assume anomalies is (B, window_size) and take last time-step.
-                a_np = anomalies.cpu().numpy()
-                if a_np.ndim == 2 and a_np.shape[1] == self.window_size:
-                    a_np = a_np[:, -1]
-                anomaly_list.append(a_np)
+                # store
+                errors_list.append(np.array(final_err))
+                pred_list.append(np.array(final_pred))
+                all_anomalies.append(anomalies.numpy())
 
-        results = {}
-        results['inputs'] = np.concatenate(inputs_list, axis=0).squeeze()
-        results['outputs'] = np.concatenate(outputs_list, axis=0).squeeze()
-        results['errors'] = np.concatenate(errors_list, axis=0).ravel()
-        results['predictions'] = np.concatenate(pred_list, axis=0).ravel()
-        results['anomalies'] = np.concatenate(anomaly_list, axis=0).ravel()
-        self.final_errors = results['errors']
-        self.final_preds = results['predictions']
-        return results
+                # Also store data for plotting if we want
+                # We'll just store last item across features dimension
+                # since Twin does that in "predict"
+                inputs_list.append(data_batch.cpu().numpy()[:, -1, :])  # shape (batch, features)
+                rec_list.append(recon1.cpu().numpy()[:, -1, :])         # partial rec from expert1 (but not the final if e2 used)
+
+        self.final_errors = np.concatenate(errors_list)
+        self.final_preds  = np.concatenate(pred_list)
+        anomalies_np      = np.concatenate(all_anomalies)
+
+        print("[Evaluate] Completed gating approach.")
+
+        return {
+            'inputs': np.concatenate(inputs_list),
+            'outputs': np.concatenate(rec_list),  # NOTE: Not truly combined e1/e2, for demonstration
+            'errors': self.final_errors,
+            'predictions': self.final_preds,
+            'anomalies': anomalies_np
+        }
 
     ###########################################################################
-    # PLOTTING METHODS
+    # 3) PLOT EXPERT1 ALONE
     ###########################################################################
     def plot_expert1(self, data_loader, train=False, plot_width=800):
         """
-        Plots Expert1's reconstruction results on data from data_loader (ignoring gating).
-        Uses the last time-step of each window.
+        Feeds all data to expert1 alone, ignoring gating, and plots the reconstruction,
+        error, threshold, anomalies, etc. akin to the Twin.plot_results method.
         """
         with torch.no_grad():
-            inputs_list = []
+            inputs_list  = []
             outputs_list = []
-            errors_list = []
+            errors_list  = []
             anomaly_list = []
             for data_batch, anomalies in data_loader:
                 data_batch = data_batch.to(self.device)
                 latent, recon = self.expert1.forward(data_batch)
+
+                # We'll do a "MaxDiff" style if self.loss_name == 'MaxDiff', else MSE
                 if self.loss_name == 'MaxDiff':
                     err_vec = (recon - data_batch).abs().max(dim=2)[0].max(dim=1)[0].cpu().numpy()
                 else:
-                    err_vec = torch.mean((recon - data_batch) ** 2, dim=(1, 2)).cpu().numpy()
+                    err_vec = torch.mean((recon - data_batch)**2, dim=(1,2)).cpu().numpy()
+
+                # print(anomalies.shape())
+                # For plotting, store last step in time
                 inputs_list.append(data_batch.cpu().numpy()[:, -1, :])
                 outputs_list.append(recon.cpu().numpy()[:, -1, :])
                 errors_list.append(err_vec)
-                a_np = anomalies.cpu().numpy()
-                if a_np.ndim == 2 and a_np.shape[1] == self.window_size:
-                    a_np = a_np[:, -1]
-                anomaly_list.append(a_np)
+                anomaly_list.append(anomalies.numpy()[:, -1])
 
-        inputs = np.concatenate(inputs_list, axis=0).squeeze()
-        outputs = np.concatenate(outputs_list, axis=0).squeeze()
-        errors = np.concatenate(errors_list, axis=0).ravel()
-        anomalies = np.concatenate(anomaly_list, axis=0).ravel()
+        inputs = np.concatenate(inputs_list).squeeze()
+        outputs = np.concatenate(outputs_list).squeeze()
+        errors = np.concatenate(errors_list)
+        anomalies = np.concatenate(anomaly_list)
 
+        # If train => we set threshold if not exist
         if train and self.threshold_e1 < 0:
-            self.threshold_e1 = errors.mean() + 3 * errors.std()
+            # e.g. mean + 3 std
+            self.threshold_e1 = errors.mean() + 3*errors.std()
+        # If not train => we highlight anomalies
         preds = [1 if e > self.threshold_e1 else 0 for e in errors]
 
         fig = go.Figure()
@@ -339,6 +363,8 @@ class TorchMoE:
                                  mode='lines',
                                  name='Expert1 Errors',
                                  line=dict(color='red')))
+
+        # Labeled anomalies
         label_indices = [i for i in range(len(anomalies)) if anomalies[i] == 1]
         if label_indices:
             fig.add_trace(go.Scatter(x=label_indices,
@@ -346,6 +372,8 @@ class TorchMoE:
                                      mode='markers',
                                      name='Labels',
                                      marker=dict(color='orange', size=7)))
+
+        # Pred anomalies
         if (not train) and (self.threshold_e1 is not None):
             fig.add_hline(y=self.threshold_e1, line_dash='dash', name='Threshold E1')
             pred_indices = [i for i in range(len(preds)) if preds[i] == 1]
@@ -355,110 +383,86 @@ class TorchMoE:
                                          mode='markers',
                                          name='Predicted Anomalies',
                                          marker=dict(color='black', size=7, symbol='x')))
+
         fig.update_layout(title='Expert1 Alone Results',
-                          xaxis_title='Window Index',
+                          xaxis_title='Time Steps',
                           yaxis_title='Value',
                           legend=dict(x=0, y=1, orientation='h'),
                           template='plotly',
                           width=plot_width)
         fig.show()
 
+    ###########################################################################
+    # 4) PLOT EXPERT2 ALONE
+    ###########################################################################
     def plot_expert2(self, data_loader, train=False, plot_width=800):
         """
-        Plots Expert2's reconstruction results on data from data_loader (ignoring gating).
-        Uses the last time-step of each window.
+        Feeds all data to expert2 alone (ignoring gating) and plots:
+          - Original data (last time-step per sample)
+          - Expert2 reconstruction (last time-step per sample)
+          - Reconstruction error
+          - Labeled anomalies (0/1), if they exist
+          - Predicted anomalies if threshold_e2 is set (and train=False)
         """
+        import plotly.graph_objects as go
+        import numpy as np
+        import torch
+
         with torch.no_grad():
             inputs_list = []
             outputs_list = []
             errors_list = []
             anomaly_list = []
+
             for data_batch, anomalies in data_loader:
+                # data_batch shape (B, window_size, features)
                 data_batch = data_batch.to(self.device)
                 latent, recon = self.expert2.forward(data_batch)
+
+                # Compute reconstruction errors
                 if self.loss_name == 'MaxDiff':
+                    # shape => (B,) for each sample
                     err_vec = (recon - data_batch).abs().max(dim=2)[0].max(dim=1)[0].cpu().numpy()
                 else:
+                    # shape => (B,)
                     err_vec = torch.mean((recon - data_batch) ** 2, dim=(1, 2)).cpu().numpy()
-                inputs_list.append(data_batch.cpu().numpy()[:, -1, :])
-                outputs_list.append(recon.cpu().numpy()[:, -1, :])
-                errors_list.append(err_vec)
-                a_np = anomalies.cpu().numpy()
-                if a_np.ndim == 2 and a_np.shape[1] == self.window_size:
-                    a_np = a_np[:, -1]
-                anomaly_list.append(a_np)
 
-        inputs = np.concatenate(inputs_list, axis=0).squeeze()
-        outputs = np.concatenate(outputs_list, axis=0).squeeze()
-        errors = np.concatenate(errors_list, axis=0).ravel()
-        anomalies = np.concatenate(anomaly_list, axis=0).ravel()
+                # For plotting, store the *final time-step* of input & output
+                # so we get a 1D sequence across the batch
+                inputs_list.append(data_batch.cpu().numpy()[:, -1, :])  # shape (B, features)
+                outputs_list.append(recon.cpu().numpy()[:, -1, :])  # shape (B, features)
+                errors_list.append(err_vec)  # shape (B,)
 
-        if train and self.threshold_e2 < 0.1:
+                # Also ensure anomalies is a 1D array of shape (B,) with 0/1 per example
+                # If anomalies is shape (B, window_size), take the final time-step:
+                anomalies_1d = anomalies.numpy()
+                if anomalies_1d.ndim == 2 and anomalies_1d.shape[1] == self.window_size:
+                    # pick last time-step
+                    anomalies_1d = anomalies_1d[:, -1]
+                # Now flatten to 1D
+                anomalies_1d = anomalies_1d.ravel()  # shape (B,)
+                anomaly_list.append(anomalies_1d)
+
+        # Concatenate along batch dimension
+        inputs = np.concatenate(inputs_list, axis=0).squeeze()  # shape (total_samples,)
+        outputs = np.concatenate(outputs_list, axis=0).squeeze()  # shape (total_samples,)
+        errors = np.concatenate(errors_list, axis=0)  # shape (total_samples,)
+        anomalies = np.concatenate(anomaly_list, axis=0).squeeze()  # shape (total_samples,)
+
+        # If training and threshold_e2 isn't set, we can set it
+        # but typically we'd set threshold after gating logic. For example:
+        if train and (self.threshold_e2 <= 0):
             self.threshold_e2 = errors.mean() + 3 * errors.std()
-        preds = [1 if e > self.threshold_e2 else 0 for e in errors]
 
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=list(range(len(inputs))),
-                                 y=inputs,
-                                 mode='lines',
-                                 name='Data',
-                                 line=dict(color='blue')))
-        fig.add_trace(go.Scatter(x=list(range(len(outputs))),
-                                 y=outputs,
-                                 mode='lines',
-                                 name='Expert2 Recon',
-                                 line=dict(color='purple')))
-        fig.add_trace(go.Scatter(x=list(range(len(errors))),
-                                 y=errors,
-                                 mode='lines',
-                                 name='Expert2 Errors',
-                                 line=dict(color='red')))
-        label_indices = [i for i in range(len(anomalies)) if anomalies[i] == 1]
-        if label_indices:
-            fig.add_trace(go.Scatter(x=label_indices,
-                                     y=[inputs[i] for i in label_indices],
-                                     mode='markers',
-                                     name='Labels',
-                                     marker=dict(color='orange', size=7)))
+        # Make predictions (binary) if threshold_e2 is set and we're not in training mode
+        preds = None
         if (not train) and (self.threshold_e2 is not None):
-            fig.add_hline(y=self.threshold_e2, line_dash='dash', name='Threshold E2')
-            pred_indices = [i for i in range(len(preds)) if preds[i] == 1]
-            if pred_indices:
-                fig.add_trace(go.Scatter(x=pred_indices,
-                                         y=[inputs[i] for i in pred_indices],
-                                         mode='markers',
-                                         name='Predicted Anomalies',
-                                         marker=dict(color='black', size=7, symbol='x')))
-        fig.update_layout(title='Expert2 Alone Results',
-                          xaxis_title='Window Index',
-                          yaxis_title='Value',
-                          legend=dict(x=0, y=1, orientation='h'),
-                          template='plotly',
-                          width=plot_width)
-        fig.show()
+            preds = [1 if e > self.threshold_e2 else 0 for e in errors]
 
-    def plot_final_moe(self, data_loader, plot_width=800):
-        """
-        Plots final MoE gating results using evaluate() on data_loader.
-        Ensures that anomalies are reduced to one label per window.
-        """
-        results = self.evaluate(data_loader)
-        inputs = np.array(results['inputs']).squeeze()
-        outputs = np.array(results['outputs']).squeeze()
-        errors = np.array(results['errors']).ravel()
-        preds = np.array(results['predictions']).ravel()
-        anomalies = np.array(results['anomalies'])
-
-        # Ensure anomalies is 1D: if anomalies is 2D with shape (N, window_size), take last column.
-        if anomalies.ndim == 2 and anomalies.shape[1] == self.window_size:
-            anomalies = anomalies[:, -1]
-        anomalies = anomalies.ravel()
-
-        # Build indices for true and predicted anomalies
-        label_indices = [i for i in range(len(anomalies)) if anomalies[i] == 1]
-        pred_indices = [i for i in range(len(preds)) if preds[i] == 1]
-
+        # Build plot
         fig = go.Figure()
+
+        # Data
         fig.add_trace(go.Scatter(
             x=list(range(len(inputs))),
             y=inputs,
@@ -466,39 +470,51 @@ class TorchMoE:
             name='Data',
             line=dict(color='blue')
         ))
+        # Expert2 recon
         fig.add_trace(go.Scatter(
             x=list(range(len(outputs))),
             y=outputs,
             mode='lines',
-            name='MoE Recon (Expert1)',
+            name='Expert2 Recon',
             line=dict(color='purple')
         ))
+        # Errors
         fig.add_trace(go.Scatter(
             x=list(range(len(errors))),
             y=errors,
             mode='lines',
-            name='MoE Final Errors',
+            name='Expert2 Errors',
             line=dict(color='red')
         ))
+
+        # Labeled anomalies
+        label_indices = [i for i in range(len(anomalies)) if anomalies[i] == 1]
         if label_indices:
             fig.add_trace(go.Scatter(
                 x=label_indices,
                 y=[inputs[i] for i in label_indices],
                 mode='markers',
-                name='True Anomalies',
+                name='Labels',
                 marker=dict(color='orange', size=7)
             ))
-        if pred_indices:
-            fig.add_trace(go.Scatter(
-                x=pred_indices,
-                y=[inputs[i] for i in pred_indices],
-                mode='markers',
-                name='MoE Predicted Anomalies',
-                marker=dict(color='black', size=7, symbol='x')
-            ))
+
+        # Show threshold & predicted anomalies if we have them
+        if (not train) and (self.threshold_e2 is not None):
+            fig.add_hline(y=self.threshold_e2, line_dash='dash', name='Threshold E2')
+            if preds is not None:
+                pred_indices = [i for i in range(len(preds)) if preds[i] == 1]
+                if pred_indices:
+                    fig.add_trace(go.Scatter(
+                        x=pred_indices,
+                        y=[inputs[i] for i in pred_indices],
+                        mode='markers',
+                        name='Pred. Anomalies',
+                        marker=dict(color='black', size=7, symbol='x')
+                    ))
+
         fig.update_layout(
-            title='Final MoE Gating Results',
-            xaxis_title='Window Index',
+            title='Expert2 Alone Results',
+            xaxis_title='Samples',
             yaxis_title='Value',
             legend=dict(x=0, y=1, orientation='h'),
             template='plotly',
@@ -507,14 +523,112 @@ class TorchMoE:
         fig.show()
 
     ###########################################################################
-    # SAVE / LOAD
+    # 5) PLOT FINAL MOE GATING
+    ###########################################################################
+    def plot_final_moe(self, data_loader, plot_width=800):
+        """
+        1) Calls self.evaluate(...) on data_loader for final gating approach
+        2) Extracts 'inputs', 'outputs', 'errors', 'predictions', 'anomalies'
+        3) Ensures 'anomalies' is 1D (one label per sample) so we can do anomalies[i] == 1
+        4) Plots final gating-based anomalies vs. the data
+        """
+        import numpy as np
+        import plotly.graph_objects as go
+
+        # 1) Get final gating results
+        results = self.evaluate(data_loader)
+        inputs = results['inputs']  # shape might be (N, features) or (N,)
+        outputs = results['outputs']  # same shape
+        errors = results['errors']  # shape (N,)
+        preds = results['predictions']  # shape (N,)
+        anomalies = results['anomalies']  # shape might be (N, window_size) or (N,) or ???
+
+        # 2) Squeeze / flatten the arrays if needed
+        # inputs and outputs typically shape (N, 1) if features=1, so we do .squeeze().
+        inputs = np.array(inputs).squeeze()
+        outputs = np.array(outputs).squeeze()
+        errors = np.array(errors).ravel()
+        preds = np.array(preds).ravel()
+        anomalies = np.array(anomalies)
+
+        # If anomalies is 2D with shape (N, window_size), you likely want the last time-step only:
+        # Or if you want to flatten everything, do anomalies.ravel().
+        if anomalies.ndim == 2 and anomalies.shape[1] == self.window_size:
+            anomalies = anomalies[:, -1]  # pick last time-step
+        anomalies = anomalies.ravel()  # now shape (N,)
+
+        # 3) Build final plot
+        fig = go.Figure()
+        # Plot data
+        fig.add_trace(go.Scatter(
+            x=list(range(len(inputs))),
+            y=inputs,
+            mode='lines',
+            name='Data',
+            line=dict(color='blue')
+        ))
+        # Plot recon (note: "final" is mostly from Expert1 in evaluate, but we keep it for reference)
+        fig.add_trace(go.Scatter(
+            x=list(range(len(outputs))),
+            y=outputs,
+            mode='lines',
+            name='MoE Recon (partial)',
+            line=dict(color='purple')
+        ))
+        # Plot final gating errors
+        fig.add_trace(go.Scatter(
+            x=list(range(len(errors))),
+            y=errors,
+            mode='lines',
+            name='MoE Final Errors',
+            line=dict(color='red')
+        ))
+
+        # 4) Labeled anomalies
+        label_indices = [i for i in range(len(anomalies)) if anomalies[i] == 1]
+        if label_indices:
+            fig.add_trace(go.Scatter(
+                x=label_indices,
+                y=[inputs[i] for i in label_indices],
+                mode='markers',
+                name='True Anomalies',
+                marker=dict(color='orange', size=7)
+            ))
+
+        # 5) Predicted anomalies
+        pred_indices = [i for i in range(len(preds)) if preds[i] == 1]
+        if pred_indices:
+            fig.add_trace(go.Scatter(
+                x=pred_indices,
+                y=[inputs[i] for i in pred_indices],
+                mode='markers',
+                name='MoE Anomalies',
+                marker=dict(color='black', size=7, symbol='x')
+            ))
+
+        # Final layout
+        fig.update_layout(
+            title='Final MoE Gating Results',
+            xaxis_title='Samples',
+            yaxis_title='Value',
+            legend=dict(x=0, y=1, orientation='h'),
+            template='plotly',
+            width=plot_width
+        )
+        fig.show()
+
+    ###########################################################################
+    # 6) SAVE AND LOAD
     ###########################################################################
     def save(self, dir_path='torch_moe'):
         os.makedirs(dir_path, exist_ok=True)
+        # Save both experts
         e1_path = os.path.join(dir_path, 'expert1.pth')
         e2_path = os.path.join(dir_path, 'expert2.pth')
+
         torch.save(self.expert1.state_dict(), e1_path)
         torch.save(self.expert2.state_dict(), e2_path)
+
         meta_path = os.path.join(dir_path, 'moe_meta.npz')
         np.savez(meta_path,
                  threshold_e1=self.threshold_e1,
@@ -530,14 +644,17 @@ class TorchMoE:
         e1_path = os.path.join(dir_path, 'expert1.pth')
         e2_path = os.path.join(dir_path, 'expert2.pth')
         meta_path = os.path.join(dir_path, 'moe_meta.npz')
+
         self.expert1.load_state_dict(torch.load(e1_path))
         self.expert2.load_state_dict(torch.load(e2_path))
+
         meta = np.load(meta_path)
         self.threshold_e1 = float(meta['threshold_e1'])
         self.threshold_e2 = float(meta['threshold_e2'])
-        self.device = str(meta['device'])
-        self.window_size = int(meta['window_size'])
+        self.device        = str(meta['device'])
+        self.window_size   = int(meta['window_size'])
         self.threshold_sigma = float(meta['threshold_sigma'])
-        self.seed = int(meta['seed'])
-        self.loss_name = str(meta['loss_name'])
+        self.seed          = int(meta['seed'])
+        self.loss_name     = str(meta['loss_name'])
+
         print(f"MoE loaded from {dir_path}. thresholds=({self.threshold_e1:.4f}, {self.threshold_e2:.4f})")
