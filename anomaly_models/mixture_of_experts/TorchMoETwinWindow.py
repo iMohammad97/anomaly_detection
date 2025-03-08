@@ -475,6 +475,8 @@ class TorchMoETwinWindow:
                     latent2, recon2 = self.expert2.forward(d_pass)
                     rec_err2 = mse(d_pass, recon2)
                     rec_err2 = rec_err2[:, -1] + window_coef*torch.mean(rec_err2, dim=1)
+
+                    rec_err2 = rec_err2.squeeze(-1)
                     rec_err2_vals = rec_err2.cpu().numpy().squeeze()
                 else:
                     rec_err2_vals = []
