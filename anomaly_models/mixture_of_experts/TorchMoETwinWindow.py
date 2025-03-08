@@ -474,10 +474,8 @@ class TorchMoETwinWindow:
                 if d_pass.shape[0] > 0:
                     latent2, recon2 = self.expert2.forward(d_pass)
                     rec_err2 = mse(d_pass, recon2)
-                    rec_err2 = rec_err2[:, -1] + window_coef*torch.mean(rec_err2, dim=1)
-
-                    rec_err2 = rec_err2.squeeze(-1)
-                    rec_err2_vals = rec_err2.cpu().numpy().squeeze()
+                    rec_err2 = rec_err2[:, -1] + window_coef * torch.mean(rec_err2, dim=1)
+                    rec_err2_vals = rec_err2.view(-1).cpu().numpy()  # now shape = [sub_batch_size]
                 else:
                     rec_err2_vals = []
 
