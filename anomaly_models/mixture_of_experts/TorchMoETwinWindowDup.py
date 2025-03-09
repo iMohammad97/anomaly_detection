@@ -7,7 +7,7 @@ import os
 import math
 
 
-class TorchMoETwin:
+class TorchMoETwinDup:
     """
     A Torch-based Mixture of Experts (MoE) for the Twin model.
 
