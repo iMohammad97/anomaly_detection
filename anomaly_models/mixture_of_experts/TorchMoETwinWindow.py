@@ -418,7 +418,7 @@ class TorchMoETwinWindow:
             results['predictions'] = [1 if e > self.threshold_e1 else 0 for e in results['errors']]
         return results
 
-    def plot_expert1(self, loader, train=False, plot_width=800):
+    def plot_expert1(self, loader, train=False, plot_width=800, save_path=None, file_format='html'):
         res = self.predict_expert1(loader, train=train)
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=list(range(len(res['inputs']))),
@@ -470,6 +470,19 @@ class TorchMoETwinWindow:
                           legend=dict(x=0, y=1, orientation='h'),
                           template='plotly',
                           width=plot_width)
+        # Optionally save the figure
+        if save_path is not None:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
+            if file_format.lower() == 'html':
+                # Save as interactive HTML
+                fig.write_html(save_path)
+            else:
+                # Save as static image (requires kaleido or orca)
+                fig.write_image(save_path, format=file_format)
+
+            print(f"Plot saved to: {save_path}")
         fig.show()
 
     def predict_expert2(self, loader, train=False, window_coef=0.2):
@@ -516,7 +529,7 @@ class TorchMoETwinWindow:
             results['predictions'] = [1 if e > self.threshold_e2 else 0 for e in results['errors']]
         return results
 
-    def plot_expert2(self, loader, train=False, plot_width=800):
+    def plot_expert2(self, loader, train=False, plot_width=800, save_path=None, file_format='html'):
         res = self.predict_expert2(loader, train=train)
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=list(range(len(res['inputs']))),
@@ -568,6 +581,19 @@ class TorchMoETwinWindow:
                           legend=dict(x=0, y=1, orientation='h'),
                           template='plotly',
                           width=plot_width)
+        # Optionally save the figure
+        if save_path is not None:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
+            if file_format.lower() == 'html':
+                # Save as interactive HTML
+                fig.write_html(save_path)
+            else:
+                # Save as static image (requires kaleido or orca)
+                fig.write_image(save_path, format=file_format)
+
+            print(f"Plot saved to: {save_path}")
         fig.show()
 
     ############################################################################
@@ -701,7 +727,7 @@ class TorchMoETwinWindow:
 
         return results
 
-    def plot_final_moe(self, loader, plot_width=800):
+    def plot_final_moe(self, loader, plot_width=800, save_path_window=None, save_path=None, file_format='html'):
         """
         Plots final gating-based usage of experts (per window) + draws threshold lines
         Also we highlight the windows that got passed to expert2
@@ -759,6 +785,19 @@ class TorchMoETwinWindow:
 
         fig.update_layout(title='Final MoE Window-level Gating', xaxis_title='Time Steps', yaxis_title='Value',
                           legend=dict(x=0, y=1, orientation='h'), template='plotly', width=plot_width)
+        # Optionally save the figure
+        if save_path is not None:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
+            if file_format.lower() == 'html':
+                # Save as interactive HTML
+                fig.write_html(save_path)
+            else:
+                # Save as static image (requires kaleido or orca)
+                fig.write_image(save_path, format=file_format)
+
+            print(f"Plot saved to: {save_path}")
         fig.show()
 
         # Let's also produce a second figure to highlight which windows got passed to e2
@@ -780,6 +819,17 @@ class TorchMoETwinWindow:
 
             fig2.update_layout(title='Windows Passed to Expert2', xaxis_title='Window Index', yaxis_title='Value',
                                legend=dict(x=0, y=1, orientation='h'), template='plotly', width=plot_width)
+            # Optionally save the figure
+            if save_path_window is not None:
+                # Ensure directory exists
+                os.makedirs(os.path.dirname(save_path_window), exist_ok=True)
+                if file_format.lower() == 'html':
+                    # Save as interactive HTML
+                    fig.write_html(save_path_window)
+                else:
+                    # Save as static image (requires kaleido or orca)
+                    fig.write_image(save_path_window, format=file_format)
+                print(f"Plot saved to: {save_path_window}")
             fig2.show()
 
     ############################################################################
