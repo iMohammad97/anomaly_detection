@@ -21,8 +21,9 @@ from .transformer_sae import TransformerSAE
 from .fae import FAE
 from .dfae import DFAE # Denoising FAE
 
-# Residual Learner
+# Residual Learners
 from .res_fae import ResidualFAE
+from .res_ebm import ResidualEBM
 
 from .gemini import Twin # TODO: I'm not done yet!
 

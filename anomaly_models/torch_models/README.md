@@ -219,9 +219,34 @@ model.learn(train_loader, n_epochs=10)
 model.plot_results(test_loader)
 ```
 
-## Residual FAE
-This model learns the difference of windows and reconstructed windows using another model.
+## Residual Learners
+These models learn the difference of windows and reconstructed windows from other models.
 Since other models might have different `forward` methods, we use a `recon_index` to retrieve the reconstructed windows of the base model.
+
+### Residual EBM
+The residual learner is another `EBM` here.
+
+sample usage:
+
+```python
+from anomaly_models.torch_models import ResidualEBM, FAE
+from utilities.torch_ucr import get_dataloaders
+
+# Dataset
+dataset_path = '../../UCR/UCR2_preprocessed'
+train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=256, batch_size=64)
+
+# Base Model
+base = FAE(window_size=256, device='cuda') # or device='cpu'
+
+# Training  
+model = ResidualEBM(window_size=256, device='cuda') 
+model.learn(train_loader, network=base, recon_index=1, n_epochs=10)
+model.plot_results(test_loader, network=base, recon_index=1)
+```
+
+### Residual FAE
+The residual learner is another `FAE` here.
 
 sample usage:
 
