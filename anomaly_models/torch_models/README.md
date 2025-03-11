@@ -27,7 +27,7 @@ sample usage:
 
 ```python
 from anomaly_models.torch_models import DAGMM
-from utilities.torch_ucr import get_dataloaders
+from utilities.loaders.ucr import get_dataloaders
 
 # Dataset
 dataset_path = '../../UCR/UCR2_preprocessed'
@@ -47,7 +47,7 @@ sample usage:
 
 ```python
 from anomaly_models.torch_models import MAD_GAN
-from utilities.torch_ucr import get_dataloaders
+from utilities.loaders.ucr import get_dataloaders
 
 # Dataset
 dataset_path = '../../UCR/UCR2_preprocessed'
@@ -67,7 +67,7 @@ sample usage:
 
 ```python
 from anomaly_models.torch_models import USAD
-from utilities.torch_ucr import get_dataloaders
+from utilities.loaders.ucr import get_dataloaders
 
 # Dataset
 dataset_path = '../../UCR/UCR2_preprocessed'
@@ -87,7 +87,7 @@ sample usage:
 
 ```python
 from anomaly_models.torch_models import CAE_M
-from utilities.torch_ucr import get_dataloaders
+from utilities.loaders.ucr import get_dataloaders
 
 # Dataset
 dataset_path = '../../UCR/UCR2_preprocessed'
@@ -106,14 +106,14 @@ sample usage:
 
 ```python
 from anomaly_models.torch_models import AE
-from utilities.torch_ucr import get_dataloaders
+from utilities.loaders.ucr import get_dataloaders
 
 # Dataset
 dataset_path = '../../UCR/UCR2_preprocessed'
 train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=256, batch_size=64)
 
 # Training  
-model = AE(window_size=256, device='cuda') # or device='cpu'
+model = AE(window_size=256, device='cuda')  # or device='cpu'
 model.learn(train_loader, n_epochs=10)
 model.plot_results(test_loader)
 ```
@@ -125,14 +125,14 @@ sample usage:
 
 ```python
 from anomaly_models.torch_models import VAE
-from utilities.torch_ucr import get_dataloaders
+from utilities.loaders.ucr import get_dataloaders
 
 # Dataset
 dataset_path = '../../UCR/UCR2_preprocessed'
 train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=256, batch_size=64)
 
 # Training  
-model = VAE(window_size=256, device='cuda') # or device='cpu'
+model = VAE(window_size=256, device='cuda')  # or device='cpu'
 model.learn(train_loader, n_epochs=10)
 model.plot_results(test_loader)
 ```
@@ -145,14 +145,14 @@ sample usage:
 
 ```python
 from anomaly_models.torch_models import SAE
-from utilities.torch_ucr import get_dataloaders
+from utilities.loaders.ucr import get_dataloaders
 
 # Dataset
 dataset_path = '../../UCR/UCR2_preprocessed'
 train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=256, batch_size=64)
 
 # Training  
-model = SAE(window_size=256, device='cuda') # or device='cpu'
+model = SAE(window_size=256, device='cuda')  # or device='cpu'
 model.learn(train_loader, n_epochs=10)
 model.plot_results(test_loader)
 ```
@@ -165,14 +165,14 @@ sample usage:
 
 ```python
 from anomaly_models.torch_models import FAE
-from utilities.torch_ucr import get_dataloaders
+from utilities.loaders.ucr import get_dataloaders
 
 # Dataset
 dataset_path = '../../UCR/UCR2_preprocessed'
 train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=256, batch_size=64)
 
 # Training  
-model = FAE(window_size=256, device='cuda') # or device='cpu'
+model = FAE(window_size=256, device='cuda')  # or device='cpu'
 model.learn(train_loader, n_epochs=10)
 model.plot_results(test_loader)
 ```
@@ -184,14 +184,14 @@ sample usage:
 
 ```python
 from anomaly_models.torch_models import FAE, StudentDecoder
-from utilities.torch_ucr import get_dataloaders
+from utilities.loaders.ucr import get_dataloaders
 
 # Dataset
 dataset_path = '../../UCR/UCR2_preprocessed'
 train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=256, batch_size=64)
 
 # Training the teacher
-teacher = FAE(window_size=256, device='cuda') # or device='cpu'
+teacher = FAE(window_size=256, device='cuda')  # or device='cpu'
 teacher.learn(train_loader, n_epochs=10)
 
 # Training the student
@@ -207,14 +207,14 @@ sample usage:
 
 ```python
 from anomaly_models.torch_models import EBM
-from utilities.torch_ucr import get_dataloaders
+from utilities.loaders.ucr import get_dataloaders
 
 # Dataset
 dataset_path = '../../UCR/UCR2_preprocessed'
 train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=256, batch_size=64)
 
 # Training  
-model = EBM(window_size=256, device='cuda') # or device='cpu'
+model = EBM(window_size=256, device='cuda')  # or device='cpu'
 model.learn(train_loader, n_epochs=10)
 model.plot_results(test_loader)
 ```
@@ -230,17 +230,17 @@ sample usage:
 
 ```python
 from anomaly_models.torch_models import ResidualEBM, FAE
-from utilities.torch_ucr import get_dataloaders
+from utilities.loaders.ucr import get_dataloaders
 
 # Dataset
 dataset_path = '../../UCR/UCR2_preprocessed'
 train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=256, batch_size=64)
 
 # Base Model
-base = FAE(window_size=256, device='cuda') # or device='cpu'
+base = FAE(window_size=256, device='cuda')  # or device='cpu'
 
 # Training  
-model = ResidualEBM(window_size=256, device='cuda') 
+model = ResidualEBM(window_size=256, device='cuda')
 model.learn(train_loader, network=base, recon_index=1, n_epochs=10)
 model.plot_results(test_loader, network=base, recon_index=1)
 ```
@@ -252,17 +252,17 @@ sample usage:
 
 ```python
 from anomaly_models.torch_models import ResidualFAE, FAE
-from utilities.torch_ucr import get_dataloaders
+from utilities.loaders.ucr import get_dataloaders
 
 # Dataset
 dataset_path = '../../UCR/UCR2_preprocessed'
 train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=256, batch_size=64)
 
 # Base Model
-base = FAE(window_size=256, device='cuda') # or device='cpu'
+base = FAE(window_size=256, device='cuda')  # or device='cpu'
 
 # Training  
-model = ResidualFAE(window_size=256, device='cuda') 
+model = ResidualFAE(window_size=256, device='cuda')
 model.learn(train_loader, network=base, recon_index=1, n_epochs=10)
 model.plot_results(test_loader, network=base, recon_index=1)
 ```
@@ -274,14 +274,14 @@ sample usage:
 
 ```python
 from anomaly_models.torch_models import Twin
-from utilities.torch_ucr import get_dataloaders
+from utilities.loaders.ucr import get_dataloaders
 
 # Dataset
 dataset_path = '../../UCR/UCR2_preprocessed'
 train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=256, batch_size=64)
 
 # Training  
-model = Twin(window_size=256, device='cuda') # or device='cpu'
+model = Twin(window_size=256, device='cuda')  # or device='cpu'
 model.learn(train_loader, n_epochs=10)
 model.plot_results(test_loader)
 ```
@@ -292,14 +292,14 @@ The Transformer version of AE, VAE, and SAE (so far).
 
 ```python
 from anomaly_models.torch_models import TransformerAE, TransformerVAE, TransformerSAE
-from utilities.torch_ucr import get_dataloaders
+from utilities.loaders.ucr import get_dataloaders
 
 # Dataset
 dataset_path = '../../UCR/UCR2_preprocessed'
 train_loader, test_loader = get_dataloaders(path=dataset_path, window_size=256, batch_size=16)
 
 # Training  
-model = TransformerAE(window_size=256, device='cuda') # or TransformerVAE, or TransformerSAE
+model = TransformerAE(window_size=256, device='cuda')  # or TransformerVAE, or TransformerSAE
 model.learn(train_loader, n_epochs=10)
 model.plot_results(test_loader)
 ```
