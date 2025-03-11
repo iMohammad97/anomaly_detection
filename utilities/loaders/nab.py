@@ -28,7 +28,7 @@ class NAB(Dataset):
         for i in range(start_at, ent_at, self.step_size):
             windows.append(array[i:i + self.window_size])
         windows = np.array(windows) # because it's faster
-        return torch.tensor(windows, dtype=torch.float32)
+        return torch.tensor(windows, dtype=torch.float32).unsqueeze(2)
 
     def __len__(self):
         return len(self.data)
