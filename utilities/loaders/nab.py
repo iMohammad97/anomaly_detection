@@ -50,9 +50,9 @@ def get_dataloaders(path: str, time_series: str, window_size: int, batch_size: i
     if time_series in possible_series:
         path = f'{path}/{time_series}'
     else:
-        print('\tPossible options include:')
+        print('Possible options include:')
         for ts in possible_series:
-            print(ts)
+            print(f'- {ts}')
         raise f'Time series {time_series} does not exist!'
     # Create datasets
     train_dataset = NAB(path, window_size, train=True, step_size=step_size, train_split=train_split)

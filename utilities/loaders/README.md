@@ -28,12 +28,12 @@ from utilities.loaders import get_nab_loaders
 
 path = '../../numenta'
 possible_series = ['artificialWithAnomaly_art_daily_flatmiddle',
-                    'artificialWithAnomaly_art_daily_jumpsdown',
-                    'artificialWithAnomaly_art_daily_jumpsup',
-                    'artificialWithAnomaly_art_increase_spike_density',
-                    'realAWSCloudwatch_ec2_cpu_utilization_24ae8d',
-                    'realKnownCause_ambient_temperature_system_failure',
-                    'realTraffic_occupancy_6005']
+                   'artificialWithAnomaly_art_daily_jumpsdown',
+                   'artificialWithAnomaly_art_daily_jumpsup',
+                   'artificialWithAnomaly_art_increase_spike_density',
+                   'realAWSCloudwatch_ec2_cpu_utilization_24ae8d',
+                   'realKnownCause_ambient_temperature_system_failure',
+                   'realTraffic_occupancy_6005']
 ts = possible_series[0]
 train_loader, test_loader = get_nab_loaders(path=path, time_series=ts, window_size=32, batch_size=256)
 ```
