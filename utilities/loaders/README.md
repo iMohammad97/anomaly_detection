@@ -5,6 +5,8 @@ Here are a number of general parameters for all the loaders that you might need:
 - `step_size`: Altering this value from its default value, which is 1, returns the **training data** windows by taking larger steps.
 - `seed`: You can set the seed by changing this parameter which is 0 by default.
 - `train_split`: For the **NAB** and **Yahoo** datasets, you can also select the percentage of training data.
+- `normalize`: For the **NAB** and **Yahoo** datasets, you can simply normalize them by setting `normalize=True`.
+
 
 ## The UCR Anomaly Archive
 
