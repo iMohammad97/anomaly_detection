@@ -13,3 +13,4 @@ dgl~=2.2.0
 plotly~=5.24.1
 torch-geometric~=2.6.1
 xlstm
+PyWavelets~=1.8.0

@@ -21,6 +21,10 @@ from .transformer_sae import TransformerSAE
 from .fae import FAE
 from .dfae import DFAE # Denoising FAE
 
+# Wavelet models
+from .wave import WaveletAE
+from .ebw import EnergyBasedWavelet
+
 # Residual Learners
 from .res_fae import ResidualFAE
 from .res_ebm import ResidualEBM
