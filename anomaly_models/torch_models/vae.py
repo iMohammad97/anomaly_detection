@@ -42,10 +42,7 @@ class VAE(nn.Module):
         x, _ = self.encoder_lstm1(x)
         x, _ = self.encoder_lstm2(x)
         x, _ = self.encoder_lstm3(x)
-        x = x.reshape(x.size(0), -1)
-        mu = self.fc_mu(x)
-        logvar = self.fc_logvar(x)
-        return mu, logvar
+        return x
 
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
@@ -60,7 +57,10 @@ class VAE(nn.Module):
         return output
 
     def forward(self, x):
-        mu, logvar = self.encode(x)
+        x = self.encode(x)
+        x = x.reshape(x.size(0), -1)
+        mu = self.fc_mu(x)
+        logvar = self.fc_logvar(x)
         z = self.reparameterize(mu, logvar)
         output = self.decode(z)
         return output, mu, logvar
