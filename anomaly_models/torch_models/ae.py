@@ -32,19 +32,25 @@ class AE(nn.Module):
         self.losses = []
         self.threshold = None
 
-    def forward(self, x):
+    def encode(self, x):
         # Encode
         x, _ = self.encoder_lstm1(x)
         x, _ = self.encoder_lstm2(x)
         x, _ = self.encoder_lstm3(x)
-        latent = x[:, -1, :]
+        z = x[:, -1, :]
+        return z
 
+    def decode(self, z):
         # Decode
-        latent_repeated = latent.unsqueeze(1).repeat(1, self.window_size, 1)
+        latent_repeated = z.unsqueeze(1).repeat(1, self.window_size, 1)
         x, _ = self.decoder_lstm1(latent_repeated)
         x, _ = self.decoder_lstm2(x)
         output, _ = self.decoder_lstm3(x)
+        return output
 
+    def forward(self, x):
+        latent = self.encode(x)
+        output = self.decode(latent)
         return output
 
     def select_loss(self, loss_name: str):
