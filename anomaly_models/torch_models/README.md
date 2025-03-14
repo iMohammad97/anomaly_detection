@@ -100,6 +100,8 @@ model.plot_results(test_loader)
 ```
 
 ## AE
+[LSTM-based Encoder-Decoder for Multi-sensor Anomaly Detection](https://arxiv.org/abs/1607.00148)
+
 A simple LSTM based AutoEncoder.
 
 sample usage:
@@ -119,6 +121,8 @@ model.plot_results(test_loader)
 ```
 
 ## VAE
+[A Multimodal Anomaly Detector for Robot-Assisted Feeding Using an LSTM-based Variational Autoencoder](https://arxiv.org/abs/1711.00614)
+
 An LSTM based Variational AutoEncoder.
 
 sample usage:
