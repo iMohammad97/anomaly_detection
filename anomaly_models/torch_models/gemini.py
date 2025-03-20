@@ -177,7 +177,7 @@ class Twin(nn.Module):
             results['predictions'] = [1 if error > self.threshold else 0 for error in results['errors']]
         return results
 
-    def plot_results(self, data, train: bool = False, plot_width: int = 800):
+    def plot_results(self, data, train: bool = False, plot_width: int = 800, save_path=None, file_format='html'):
         results = self.predict(data, train=train)
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=list(range(len(results['inputs']))),
@@ -226,6 +226,19 @@ class Twin(nn.Module):
                           legend=dict(x=0, y=1, traceorder='normal', orientation='h'),
                           template='plotly',
                           width=plot_width)
+        # Optionally save the figure
+        if save_path is not None:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
+            if file_format.lower() == 'html':
+                # Save as interactive HTML
+                fig.write_html(save_path)
+            else:
+                # Save as static image (requires kaleido or orca)
+                fig.write_image(save_path, format=file_format)
+
+            print(f"Plot saved to: {save_path}")
         fig.show()
 
     def stationary_loss(self, latent, per_batch: bool = False):
@@ -243,7 +256,7 @@ class Twin(nn.Module):
         loss = self.mean_coef * mean_loss + self.std_coef * std_loss
         return loss, mean_loss, std_loss
 
-    def plot_losses(self, fig_size=(10, 6)):
+    def plot_losses(self, fig_size=(10, 6), save_path=None):
         xs = np.arange(len(self.losses)) + 1
         plt.figure(figsize=fig_size)
         plt.plot(xs, self.losses, label='Total Loss')
@@ -253,6 +266,12 @@ class Twin(nn.Module):
         plt.grid()
         plt.xticks(xs)
         plt.legend()
+        if save_path:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    
+            # Save the figure
+            plt.savefig(save_path, bbox_inches='tight')
         plt.show()
 
     def save(self, path: str = ''):
