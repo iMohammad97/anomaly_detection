@@ -6,6 +6,7 @@ from matplotlib import pyplot as plt
 from tqdm.notebook import tqdm, trange
 import plotly.graph_objects as go
 import torch.nn.functional as F
+import os
 
 class FAE(nn.Module):
     def __init__(self, n_features: int = 1, window_size: int = 256, latent_dim: int = 32, device: str = 'cpu', seed: int = 0):
