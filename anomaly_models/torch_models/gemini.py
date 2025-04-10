@@ -9,7 +9,7 @@ import torch.nn.functional as F
 import os
 
 class Twin(nn.Module):
-    def __init__(self, n_features: int = 1, window_size: int = 256, latent_dim: int = 32, device: str = 'cpu', seed: int = 0):
+    def __init__(self, n_features: int = 1, window_size: int = 256, latent_dim: int = 32, device: str = 'cpu', seed: int = 0, mean_coef: float = 1, std_coef: float = 1):
         super(Twin, self).__init__()
         torch.manual_seed(seed)
         self.name = 'Twin'
@@ -18,8 +18,8 @@ class Twin(nn.Module):
         self.n_features = n_features
         self.window_size = window_size
         self.latent_dim = latent_dim
-        self.mean_coef = 1
-        self.std_coef = 1
+        self.mean_coef = mean_coef
+        self.std_coef = std_coef
         lstm_units = latent_dim
 
         # LSTM Layers
@@ -135,7 +135,7 @@ class Twin(nn.Module):
                 latent, x = self.forward(d)
                 recon = recon_loss1(x, d) + recon_loss2(x[:, -self.latent_dim:], d[:, -self.latent_dim:])
                 _, mean, std = self.stationary_loss(latent)
-                loss = recon + mean + std
+                loss = recon + self.mean_coef mean + self.std_coef * std
                 recons.append(recon.item()), means.append(mean.item()), stds.append(std.item())
                 self.optimizer.zero_grad()
                 loss.backward()
