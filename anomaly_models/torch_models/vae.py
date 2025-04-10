@@ -5,6 +5,7 @@ from torch.nn import functional as F
 from tqdm.notebook import tqdm, trange
 import numpy as np
 import plotly.graph_objects as go
+import os
 
 class VAE(nn.Module):
     def __init__(self, n_features: int = 1, window_size: int = 256, latent_dim: int = 32, lstm_units: int = 64, device: str = 'cpu', seed: int = 0):
