@@ -135,7 +135,7 @@ class Twin(nn.Module):
                 latent, x = self.forward(d)
                 recon = recon_loss1(x, d) + recon_loss2(x[:, -self.latent_dim:], d[:, -self.latent_dim:])
                 _, mean, std = self.stationary_loss(latent)
-                loss = recon + self.mean_coef mean + self.std_coef * std
+                loss = recon + self.mean_coef * mean + self.std_coef * std
                 recons.append(recon.item()), means.append(mean.item()), stds.append(std.item())
                 self.optimizer.zero_grad()
                 loss.backward()
