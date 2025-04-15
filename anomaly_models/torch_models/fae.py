@@ -91,7 +91,7 @@ class FAE(nn.Module):
         else:
             raise ValueError("Unsupported loss function")
 
-    def learn(self, train_loader, n_epochs: int, seed: int = 42, loss_name: str = 'MaxDiff'):
+    def learn(self, train_loader, n_epochs: int, seed: int = 42, loss_name: str = 'MSE_R2'):
         torch.manual_seed(seed)
         self.train()
         recon_loss = self.select_loss(loss_name)
