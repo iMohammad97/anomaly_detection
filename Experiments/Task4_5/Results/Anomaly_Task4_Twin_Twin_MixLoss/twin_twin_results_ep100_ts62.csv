@@ -1,2 +1,0 @@
-ModelPath,AUC_Custom,PerfectPointFound,AUC_PR,AUC_ROC,CompositeF1
-/kaggle/working/results/twin_twin_model_ep100_ts62.pth,0.0010121457489878543,False,0.004260420981748244,0.5220755914075954,0.025943396226415092

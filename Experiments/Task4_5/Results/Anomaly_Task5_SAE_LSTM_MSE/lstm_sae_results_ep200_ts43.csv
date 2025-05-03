@@ -1,2 +1,0 @@
-ModelPath,AUC_Custom,PerfectPointFound,AUC_PR,AUC_ROC,CompositeF1
-/kaggle/working/results/lstm_sae_model_ep200_ts43.h5,0.0011476664116296864,False,0.033609793880108166,0.8531963017853449,0
