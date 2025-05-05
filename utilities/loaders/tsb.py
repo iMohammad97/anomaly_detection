@@ -7,7 +7,7 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset, DataLoader
 
-class TSB_UAD(Dataset):
+class TSB(Dataset):
     def __init__(self, window_size: int, data_id: int, train: bool, step_size: int = 1, train_split: float = 0.5):
         self.path = 'data/TSB-AD-U'
         self.normalize = None
@@ -20,8 +20,8 @@ class TSB_UAD(Dataset):
         self.train, self.split = train, train_split
 
         self.data, self.labels = self.get_windows(data_id)
-            
 
+    @static
     def download(self):
         url = 'https://www.thedatum.org/datasets/TSB-AD-U.zip'
         response = requests.get(url)
@@ -30,7 +30,7 @@ class TSB_UAD(Dataset):
         # Open the ZIP file from the downloaded content
         with zipfile.ZipFile(io.BytesIO(response.content)) as z:
             z.extractall('data')  # Extract to the specified folder
-        print(f'Donwloaded the dataset from {url}')
+        print(f'Downloaded the dataset from {url}')
 
 
     def get_windows(self, data_id):
@@ -41,7 +41,7 @@ class TSB_UAD(Dataset):
                 data = self.create_windows(np.array(df['Data']))
                 label = self.create_windows(np.array(df['Label']))
                 return data, label
-        raise 'Time Series doesn\'t exist!'
+        raise f'Time Series {data_id} does not exist!'
 
 
     def create_windows(self, array):
@@ -58,8 +58,8 @@ class TSB_UAD(Dataset):
         windows = np.array(windows) # because it's faster
         return torch.tensor(windows, dtype=torch.float32).unsqueeze(2)
 
-    def set_normalize(self, minimum, maximum):
-        self.normalize = lambda x : (x - minimum) / (maximum - minimum)
+    def set_normalize(self, mu, sigma):
+        self.normalize = lambda x : (x - mu) / sigma
 
     def __len__(self):
         return len(self.data)
@@ -69,11 +69,16 @@ class TSB_UAD(Dataset):
             return self.normalize(self.data[idx]), self.labels[idx]
         return self.data[idx], self.labels[idx]
 
-def get_dataloaders(window_size: int, data_id: int, batch_size: int = 256, train_split: float = 0.5, step_size: int = 1, shuffle: bool = False, seed: int = 0):
+def get_dataloaders(window_size: int, data_id: int, batch_size: int = 256, train_split: float = 0.5, normalize: bool = True, step_size: int = 1, shuffle: bool = False, seed: int = 0):
     torch.manual_seed(seed)
     # Create datasets
-    train_dataset = TSB_UAD(window_size, data_id, step_size=step_size, train=True, train_split=train_split)
-    test_dataset = TSB_UAD(window_size, data_id, step_size=1, train=False, train_split=train_split) # test step size should always be 1
+    train_dataset = TSB(window_size, data_id, step_size=step_size, train=True, train_split=train_split)
+    test_dataset = TSB(window_size, data_id, step_size=1, train=False, train_split=train_split) # test step size should always be 1
+    #  Z-normalization
+    if normalize:
+        mean, std = torch.mean(train_dataset.data), torch.std(train_dataset.data)
+        train_dataset.set_normalize(mu=mean, sigma=std)
+        test_dataset.set_normalize(mu=mean, sigma=std)
     # Create DataLoaders
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)

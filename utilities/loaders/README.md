@@ -4,8 +4,8 @@ Here are a number of general parameters for all the loaders that you might need:
 - `shuffle`: Setting this `True` will shuffle the training data for you.
 - `step_size`: Altering this value from its default value, which is 1, returns the **training data** windows by taking larger steps.
 - `seed`: You can set the seed by changing this parameter which is 0 by default.
-- `train_split`: For the **NAB** and **Yahoo** datasets, you can also select the percentage of training data.
-- `normalize`: For the **NAB** and **Yahoo** datasets, you can simply normalize them by setting `normalize=True`.
+- `train_split`: For the **NAB**, **Yahoo** and **TSB-AD-U** datasets, you can also select the percentage of training data.
+- `normalize`: For the **NAB**, **Yahoo** and **TSB-AD-U** datasets, you can simply normalize them by setting `normalize=True`. The **TSB-AD-U** uses Z-normalization. 
 
 
 ## The UCR Anomaly Archive
@@ -52,4 +52,16 @@ from utilities.loaders import get_yahoo_loaders
 
 path = '../../yahoo'
 train_loader, test_loader = get_yahoo_loaders(path=path, benchmark=1, data_id=10, window_size=32, batch_size=256)
+```
+
+
+
+## TSB-AD-U
+Taken from [🐘 The Elephant in the Room](https://thedatumorg.github.io/TSB-AD/).
+You can load any of the 870 time series available by setting the `data_id` parameter.
+
+```python
+from utilities.loaders import get_tsb_loaders
+
+train_loader, test_loader = get_tsb_loaders(window_size=256, data_id=870)
 ```
