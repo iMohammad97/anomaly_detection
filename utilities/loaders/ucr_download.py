@@ -19,7 +19,7 @@ class UCR(Dataset):
         self.window_size, self.step_size = window_size, step_size
         self.data, self.labels = self.get_windows(data_id, train)
 
-    @staticmethod
+
     def download(self):
         url = 'https://www.cs.ucr.edu/%7Eeamonn/time_series_data_2018/UCR_TimeSeriesAnomalyDatasets2021.zip'
         response = requests.get(url)

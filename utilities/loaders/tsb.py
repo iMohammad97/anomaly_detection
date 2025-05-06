@@ -21,7 +21,7 @@ class TSB(Dataset):
 
         self.data, self.labels = self.get_windows(data_id)
 
-    @staticmethod
+
     def download(self):
         url = 'https://www.thedatum.org/datasets/TSB-AD-U.zip'
         response = requests.get(url)
