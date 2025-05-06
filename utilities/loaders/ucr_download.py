@@ -89,7 +89,7 @@ def get_dataloaders(data_id: int, window_size: int, batch_size: int = 256, norma
     torch.manual_seed(seed)
     # Create datasets
     train_dataset = UCR(data_id, window_size, step_size=step_size, train=True, normalization=normalization)
-    test_dataset = UCR(data_id, window_size, step_size=1, train=False, normalization=normalization) # test step size should always be 1
+    test_dataset = UCR(data_id, window_size, train=False, normalization=normalization) # test step size should always be 1
     # Create DataLoaders
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)

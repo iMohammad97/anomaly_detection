@@ -19,6 +19,14 @@ path = '../../UCR/UCR2_preprocessed'
 train_loader, test_loader = get_ucr_loaders(path=path, data_id=1, window_size=32, batch_size=256)
 ```
 
+Alternatively, you can download the dataset using the second version of the loaders.
+
+```python
+from utilities.loaders import get_ucr2_loaders
+
+train_loader, test_loader = get_ucr2_loaders(data_id=250, window_size=256)
+```
+
 
 ## The Numenta Anomaly Benchmark (NAB)
 
@@ -63,5 +71,5 @@ You can load any of the 870 time series available by setting the `data_id` param
 ```python
 from utilities.loaders import get_tsb_loaders
 
-train_loader, test_loader = get_tsb_loaders(window_size=256, data_id=870)
+train_loader, test_loader = get_tsb_loaders(data_id=870, window_size=256)
 ```

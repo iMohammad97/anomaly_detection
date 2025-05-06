@@ -8,7 +8,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 
 class TSB(Dataset):
-    def __init__(self, window_size: int, data_id: int, train: bool, step_size: int = 1, train_split: float = 0.5):
+    def __init__(self, data_id: int, window_size: int, train: bool, step_size: int = 1, train_split: float = 0.5):
         self.path = 'data/TSB-AD-U'
         self.normalize = None
 
@@ -21,8 +21,8 @@ class TSB(Dataset):
 
         self.data, self.labels = self.get_windows(data_id)
 
-
-    def download(self):
+    @staticmethod
+    def download():
         url = 'https://www.thedatum.org/datasets/TSB-AD-U.zip'
         response = requests.get(url)
         response.raise_for_status() # Ensure we notice bad responses
@@ -69,11 +69,11 @@ class TSB(Dataset):
             return self.normalize(self.data[idx]), self.labels[idx]
         return self.data[idx], self.labels[idx]
 
-def get_dataloaders(window_size: int, data_id: int, batch_size: int = 256, train_split: float = 0.5, normalize: bool = True, step_size: int = 1, shuffle: bool = False, seed: int = 0):
+def get_dataloaders(data_id: int, window_size: int, batch_size: int = 256, train_split: float = 0.5, normalize: bool = True, step_size: int = 1, shuffle: bool = False, seed: int = 0):
     torch.manual_seed(seed)
     # Create datasets
-    train_dataset = TSB(window_size, data_id, step_size=step_size, train=True, train_split=train_split)
-    test_dataset = TSB(window_size, data_id, step_size=1, train=False, train_split=train_split) # test step size should always be 1
+    train_dataset = TSB(data_id, window_size, step_size=step_size, train=True, train_split=train_split)
+    test_dataset = TSB(data_id, window_size, train=False, train_split=train_split)
     #  Z-normalization
     if normalize:
         mean, std = torch.mean(train_dataset.data), torch.std(train_dataset.data)
