@@ -4,7 +4,7 @@ Here are a number of general parameters for all the loaders that you might need:
 - `shuffle`: Setting this `True` will shuffle the training data for you.
 - `step_size`: Altering this value from its default value, which is 1, returns the **training data** windows by taking larger steps.
 - `seed`: You can set the seed by changing this parameter which is 0 by default.
-- `train_split`: For the **NAB**, **Yahoo** and **TSB-AD-U** datasets, you can also select the percentage of training data.
+- `train_split`: For the **NAB** and **Yahoo** datasets, you can also select the percentage of training data.
 - `normalize`: For the **NAB**, **Yahoo** and **TSB-AD-U** datasets, you can simply normalize them by setting `normalize=True`. The **TSB-AD-U** uses Z-normalization. 
 
 
