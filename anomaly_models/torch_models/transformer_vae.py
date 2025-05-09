@@ -97,7 +97,13 @@ class TransformerVAE(nn.Module):
         elif loss_name == "MaxDiff":
             return lambda inputs, target: torch.max(torch.abs(inputs - target))
         elif loss_name == "MSE_R2":
-            return lambda inputs, target: (F.mse_loss(inputs, target, reduction='mean') + (1 - (1 - torch.sum((target - inputs) ** 2) / (torch.sum((target - torch.mean(target)) ** 2) + 1e-10)))) / 2
+            return lambda inputs, target: (F.mse_loss(inputs, target, reduction='mean') + (1 - (
+                    1 - torch.sum((target - inputs) ** 2) / (
+                    torch.sum((target - torch.mean(target)) ** 2) + 1e-10)))) / 2
+        elif loss_name == "MSE+RSE":
+            return lambda inputs, target: (F.mse_loss(inputs, target, reduction='mean') ** 2 + (1 - (
+                    1 - torch.sum((target - inputs) ** 2) / (
+                    torch.sum((target - torch.mean(target)) ** 2) + 1e-10)))) / 2
         else:
             raise ValueError("Unsupported loss function")
 
