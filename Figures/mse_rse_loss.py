@@ -42,6 +42,7 @@ def plot_surface(Z, title, filename, cmap='viridis'):
     ax.set_ylabel('Amplitude')
     ax.set_xticks([5, 10, 15, 20])
     ax.set_zticks([])
+    ax.invert_yaxis()  # Invert the amplitude axis
     plt.tight_layout()
     plt.savefig(filename, format='pdf', bbox_inches='tight')
     plt.close()
